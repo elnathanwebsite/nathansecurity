@@ -7,76 +7,82 @@
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
-    console.log("🛡️ NathanSecurity: Safe Mode Active");
-
+    // ============================================================
+    // BAGIAN 1: STEALTH MODE (YANG DIPERBAIKI)
+    // ============================================================
+    
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // --- FUNGSI KRIPTO YANG LEBIH AMAN (SAFE DECODE) ---
-    
+    // Fungsi Acak (Encode)
     function scramble(str) {
         try {
-            if (!str) return str; // Jangan acak null/undefined
-            if (String(str).startsWith(SECRET_PREFIX)) return str; // Jangan acak 2 kali
-            
-            // Menggunakan encodeURIComponent agar Emoji/Spasi tidak bikin error
-            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
-        } catch(e) { 
-            return str; // Kalau gagal ngacak, biarkan apa adanya (biar web gak error)
-        }
+            // Pastikan input adalah string
+            const safeStr = String(str);
+            if (safeStr.startsWith(SECRET_PREFIX)) return safeStr;
+            // Gunakan Base64 standar (lebih stabil untuk Firebase)
+            return SECRET_PREFIX + btoa(safeStr).split('').reverse().join('');
+        } catch(e) { return str; }
     }
 
+    // Fungsi Pulihkan (Decode)
     function unscramble(str) {
         try {
-            if (!str) return null; // Balikin null kalau emang kosong
-            if (!str.startsWith(SECRET_PREFIX)) return str; // Kalau data lama (telanjang), balikin langsung
-            
+            if (!str || typeof str !== 'string') return str;
+            if (!str.startsWith(SECRET_PREFIX)) return str; 
+
+            // Coba pulihkan
             let cleanStr = str.replace(SECRET_PREFIX, "");
-            // Balikin urutan -> decode Base64 -> decode Component
-            return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
+            let decoded = atob(cleanStr.split('').reverse().join(''));
+            return decoded;
         } catch(e) { 
-            console.warn("NathanSecurity: Gagal decrypt, mengembalikan data asli agar web tidak crash.");
-            return str.replace(SECRET_PREFIX, ""); // Fail-safe: paksa balikin string meski mungkin rusak dikit
+            // PENTING: Jika gagal decode, kembalikan null agar website TIDAK CRASH
+            console.warn("NathanSecurity: Gagal memulihkan data, mereset...", e);
+            return null; 
         }
     }
 
-    // --- OVERRIDE FUNGSI STORAGE ---
-
+    // A. BAJAK FUNGSI SIMPAN
     Storage.prototype.setItem = function(key, value) {
-        // Kita paksa ubah ke String dulu karena LocalStorage aslinya cuma terima string
-        // Ini mencegah error "[object Object]"
-        const stringValue = String(value);
-        const hiddenValue = scramble(stringValue);
-        originalSetItem.call(this, key, hiddenValue);
+        try {
+            const hiddenValue = scramble(value);
+            originalSetItem.call(this, key, hiddenValue);
+        } catch (e) {
+            // Fallback: Jika error, simpan biasa saja daripada data hilang
+            originalSetItem.call(this, key, value);
+        }
     };
 
+    // B. BAJAK FUNGSI AMBIL (KUNCI PERBAIKAN WEBSITE ANDA)
     Storage.prototype.getItem = function(key) {
         const hiddenValue = originalGetItem.call(this, key);
-        // KUNCI PERBAIKAN: Jika null, kembalikan null (jangan di-unscramble)
-        if (hiddenValue === null) return null;
-        
+        // Kita terjemahkan balik sebelum dikasih ke Website
         return unscramble(hiddenValue);
     };
 
-    // --- AUTO-SWEEP YANG LEBIH LEMBUT ---
-    // Kita tunda 3 detik biar Website loading sempurna dulu
+    console.log("🔒 Stealth Mode: Active & Stable");
+
+    // ============================================================
+    // BAGIAN 1.5: SAPU BERSIH (AUTO-FIX FIREBASE)
+    // ============================================================
+    // Kita jalankan agak lambat (3 detik) biar Firebase login dulu dengan tenang
     setTimeout(() => {
         try {
-            // Kita hanya enkripsi data yang jelas-jelas berbentuk JSON String (diawali kurung kurawal)
-            // atau email, untuk menghindari kerusakan data biner Firebase
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
                 const rawValue = originalGetItem.call(localStorage, key);
 
                 if (rawValue && !rawValue.startsWith(SECRET_PREFIX)) {
-                    // Cek apakah ini data penting?
+                    // Enkripsi data yang tertinggal
                     localStorage.setItem(key, rawValue); 
                 }
             }
         } catch (e) {}
     }, 3000); 
 
-    // --- SECURITY MONITORING (Sama seperti sebelumnya) ---
+    // ============================================================
+    // BAGIAN 2: SECURITY MODE (BLOKIR)
+    // ============================================================
     async function startMonitoring() {
         try {
             const response = await fetch(API_URL, {
@@ -96,7 +102,7 @@
         try { window.stop(); } catch(e){}
         document.documentElement.innerHTML = '';
         document.documentElement.style.backgroundColor = "#000";
-        document.body.innerHTML = `<h1 style="color:red;text-align:center;margin-top:20%">🚫 BLOCKED</h1>`;
+        document.body.innerHTML = `<div style="color:red; text-align:center; margin-top: 20%; font-family: sans-serif;"><h1>🚫 ACCESS DENIED</h1><p>IP: ${ip}</p></div>`;
         document.addEventListener('contextmenu', e => e.preventDefault());
     }
 
