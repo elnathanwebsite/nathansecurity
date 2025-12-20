@@ -6,25 +6,22 @@ from upstash_redis import Redis
 from cryptography.fernet import Fernet
 import re
 
-# --- 1. KONEKSI DATABASE (UPSTASH) ---
 redis = Redis(
     url=os.environ.get("UPSTASH_REDIS_REST_URL"),
     token=os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 )
 
-# --- 2. SETUP KUNCI ENKRIPSI (FERNET) ---
 encrypt_key = os.environ.get("ENCRYPTION_KEY")
 if not encrypt_key:
     encrypt_key = Fernet.generate_key()
 cipher_suite = Fernet(encrypt_key)
 
-# --- 3. KONFIGURASI KEAMANAN ---
-BLOCK_DURATION = 3600  # 1 Jam
-REFRESH_LIMIT = 5      # Max refresh 5x
-SCAN_LIMIT = 2         # Max scan 2x
+BLOCK_DURATION = 3600  
+REFRESH_LIMIT = 5      
+SCAN_LIMIT = 2         
 
-# --- 4. KONFIGURASI LOGGING (Lapisan Baru) ---
-ENCRYPTION_LOG_KEY = "encryption_log" # Kunci Redis untuk menyimpan log
+
+ENCRYPTION_LOG_KEY = "encryption_log"
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -41,13 +38,12 @@ class handler(BaseHTTPRequestHandler):
             
             action = body.get('action') 
             
-            # ==========================================
+         
             # FITUR 1: HIDE DATA / "HASHING VISUAL"
-            # ==========================================
             if action == 'hide_data':
                 payload = str(body.get('data', ''))
                 
-                # --- Lapisan Baru: Log Attempt ---
+         
                 self.log_encryption_attempt(payload)
                 
                 encoded = base64.b64encode(payload.encode()).decode()
@@ -56,9 +52,8 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json_response({"status": "success", "result": hidden_result})
                 return
 
-            # ==========================================
+          
             # FITUR 2: ENKRIPSI MILITER (FERNET)
-            # ==========================================
             if action in ['encrypt', 'decrypt']:
                 payload = body.get('data')
                 result = ""
@@ -76,9 +71,6 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json_response({"status": "success", "result": result})
                 return
 
-            # ==========================================
-            # FITUR 3: KEAMANAN (BLOKIR IP SPAM)
-            # ==========================================
             client_ip = self.headers.get('x-forwarded-for', 'unknown').split(',')[0]
             current_path = body.get('path', '/')
 
@@ -113,7 +105,6 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
-    # --- FUNGSI BANTUAN (HELPER) ---
     def send_json_response(self, data):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -123,8 +114,6 @@ class handler(BaseHTTPRequestHandler):
 
     def respond_blocked(self, ip):
         self.send_json_response({"status": "blocked", "ip": ip})
-
-    # --- Lapisan Baru: Fungsi untuk Menganalisis dan Mencatat Upaya Enkripsi ---
     def log_encryption_attempt(self, data):
         """Menganalisis data dan mencatat jenisnya ke Redis."""
         data_type = "unknown"
@@ -141,7 +130,6 @@ class handler(BaseHTTPRequestHandler):
         elif len(data_str) > 50 and not data_str.isalpha():
             data_type = "long_string_or_id"
 
-        # Simpan log ke Redis (misalnya, hanya 100 log terakhir)
         log_entry = {
             "timestamp": int(os.time()),
             "client_ip": self.headers.get('x-forwarded-for', 'unknown').split(',')[0],
@@ -149,4 +137,4 @@ class handler(BaseHTTPRequestHandler):
             "data_preview": data_str[:50] + "..." if len(data_str) > 50 else data_str
         }
         redis.lpush(ENCRYPTION_LOG_KEY, json.dumps(log_entry))
-        redis.ltrim(ENCRYPTION_LOG_KEY, 0, 99) # Pertahankan hanya 100 log terakhir
+        redis.ltrim(ENCRYPTION_LOG_KEY, 0, 99) 
