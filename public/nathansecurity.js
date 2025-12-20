@@ -14,17 +14,9 @@
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // 1. Fungsi Mengacak (Biar Hacker Pusing)
-    function encrypt(data) {
-        try {
-            const str = String(data);
-            if (str.startsWith(SECRET_PREFIX)) return str; // Jangan acak 2 kali
-            // Teknik: Prefix + Base64 + Dibalik
-            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
-        } catch(e) { return data; }
-    }
+    // --- PEMBAJAKAN (INTERCEPTOR) ---
 
-    // 2. Fungsi Menerjemahkan (Biar Website Gak Error/Blank)
+    // 1. Fungsi Menerjemahkan (Biar Website Gak Error/Blank) - TETAP SAMA
     function decrypt(data) {
         try {
             if (!data) return null;
@@ -38,17 +30,45 @@
         }
     }
 
-    // --- PEMBAJAKAN (INTERCEPTOR) ---
+    // 2. Fungsi Mengacak (Biar Hacker Pusing) - SEKARANG MENGGUNAKAN API
+    function encrypt(data) {
+        try {
+            const str = String(data);
+            if (str.startsWith(SECRET_PREFIX)) return str; // Jangan acak 2 kali
+
+            // --- Logika Baru: Panggil API Python untuk mengacak data ---
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", API_URL, false); // false membuat request menjadi SINKRON
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(JSON.stringify({ action: "hide_data", data: str }));
+
+            if (xhr.status === 200) {
+                const response = JSON.parse(xhr.responseText);
+                if (response.status === "success") {
+                    return response.result; // Kembalikan hasil dari server
+                }
+            }
+            
+            // --- Fallback: Jika API gagal, gunakan metode lama ---
+            console.warn("Gagal menghubungi API enkripsi, menggunakan enkripsi lokal.");
+            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
+            
+        } catch(e) {
+            // --- Fallback: Jika terjadi error lain, gunakan metode lama ---
+            console.warn("Error saat mengenkripsi via API, menggunakan enkripsi lokal.");
+            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
+        }
+    }
 
     // Saat Website mau SIMPAN data (misal: simpan token login)
-    // Kita cegat -> Kita acak -> Baru masukin gudang
+    // Kita cegat -> Kita acak via API -> Baru masukin gudang
     Storage.prototype.setItem = function(key, value) {
         const secureValue = encrypt(value);
         originalSetItem.call(this, key, secureValue);
     };
 
     // Saat Website mau TAMPILKAN data (misal: nama user di pojok kanan)
-    // Kita ambil dari gudang (yang acak) -> Kita terjemahkan -> Kasih ke website
+    // Kita ambil dari gudang (yang diacak) -> Kita terjemahkan -> Kasih ke website
     Storage.prototype.getItem = function(key) {
         const rawValue = originalGetItem.call(this, key);
         return decrypt(rawValue);
@@ -70,7 +90,7 @@
 
                 // Kalau ketemu data yang belum ada tulisan NS_SECURE...
                 if (rawValue && !String(rawValue).startsWith(SECRET_PREFIX)) {
-                    // Timpa dengan versi aman
+                    // Timpa dengan versi aman (menggunakan fungsi encrypt yang baru)
                     localStorage.setItem(key, rawValue); 
                 }
             }
