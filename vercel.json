@@ -1,6 +1,6 @@
 {
-    "rewrites": [
-        { "source": "/nathansecurity.js", "destination": "/public/nathansecurity.js" },
-        { "source": "/api/monitor", "destination": "/api/monitor.py" }
-    ]
+  "rewrites": [
+    { "source": "/nathansecurity.js", "destination": "/public/nathansecurity.js" },
+    { "source": "/api/monitor", "destination": "/api/monitor.py" }
+  ]
 }
