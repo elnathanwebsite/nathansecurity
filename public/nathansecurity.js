@@ -4,84 +4,93 @@
     const API_URL = SERVER_HOST + "/api/monitor";
     const SECRET_PREFIX = "NS_SECURE::"; 
 
+    // Singleton Pattern (Biar gak jalan dobel)
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
     // ============================================================
-    // BAGIAN 1: STEALTH MODE (YANG DIPERBAIKI)
+    // BAGIAN 1: INTELLIGENT STEALTH MODE (ANTI-CRASH)
     // ============================================================
     
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // Fungsi Acak (Encode)
+    // Fungsi Pengacak (Hanya mengacak jika belum diacak)
     function scramble(str) {
         try {
-            // Pastikan input adalah string
             const safeStr = String(str);
             if (safeStr.startsWith(SECRET_PREFIX)) return safeStr;
-            // Gunakan Base64 standar (lebih stabil untuk Firebase)
-            return SECRET_PREFIX + btoa(safeStr).split('').reverse().join('');
+            // Enkripsi Base64 + Reverse
+            return SECRET_PREFIX + btoa(encodeURIComponent(safeStr)).split('').reverse().join('');
         } catch(e) { return str; }
     }
 
-    // Fungsi Pulihkan (Decode)
+    // Fungsi Pemulih (KUNCI ANTI-CRASH DISINI!)
     function unscramble(str) {
         try {
-            if (!str || typeof str !== 'string') return str;
-            if (!str.startsWith(SECRET_PREFIX)) return str; 
+            if (!str) return str;
+            
+            // CEK DULU: Apakah ini data terenkripsi buatan kita?
+            if (!String(str).startsWith(SECRET_PREFIX)) {
+                // JIKA TIDAK: Berarti ini data lama atau Firebase loading duluan.
+                // KEMBALIKAN APA ADANYA biar website tidak error!
+                return str; 
+            }
 
-            // Coba pulihkan
+            // JIKA YA: Baru kita bongkar sandinya
             let cleanStr = str.replace(SECRET_PREFIX, "");
-            let decoded = atob(cleanStr.split('').reverse().join(''));
-            return decoded;
+            return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
         } catch(e) { 
-            // PENTING: Jika gagal decode, kembalikan null agar website TIDAK CRASH
-            console.warn("NathanSecurity: Gagal memulihkan data, mereset...", e);
-            return null; 
+            // Fail-safe: Jika gagal decode, kembalikan aslinya.
+            return str; 
         }
     }
 
-    // A. BAJAK FUNGSI SIMPAN
+    // A. PEMBAJAKAN FUNGSI SIMPAN
+    // Setiap kali website mau nyimpen data baru, KITA PAKSA ENKRIPSI.
     Storage.prototype.setItem = function(key, value) {
-        try {
-            const hiddenValue = scramble(value);
-            originalSetItem.call(this, key, hiddenValue);
-        } catch (e) {
-            // Fallback: Jika error, simpan biasa saja daripada data hilang
-            originalSetItem.call(this, key, value);
-        }
+        const hiddenValue = scramble(String(value));
+        originalSetItem.call(this, key, hiddenValue);
     };
 
-    // B. BAJAK FUNGSI AMBIL (KUNCI PERBAIKAN WEBSITE ANDA)
+    // B. PEMBAJAKAN FUNGSI AMBIL
+    // Setiap kali website minta data, kita cek dulu statusnya.
     Storage.prototype.getItem = function(key) {
-        const hiddenValue = originalGetItem.call(this, key);
-        // Kita terjemahkan balik sebelum dikasih ke Website
-        return unscramble(hiddenValue);
+        const storedValue = originalGetItem.call(this, key);
+        return unscramble(storedValue);
     };
 
-    console.log("🔒 Stealth Mode: Active & Stable");
+    console.log("🛡️ NathanSecurity: Hybrid Stealth Mode Active");
 
     // ============================================================
-    // BAGIAN 1.5: SAPU BERSIH (AUTO-FIX FIREBASE)
+    // BAGIAN 2: OPERASI SAPU BERSIH (BACKGROUND TASK)
     // ============================================================
-    // Kita jalankan agak lambat (3 detik) biar Firebase login dulu dengan tenang
+    // Karena kita membiarkan data lama terbaca (biar gak crash),
+    // Kita perlu "Sapu Bersih" pelan-pelan agar semuanya jadi terenkripsi.
+    
+    // Tunggu 2 detik (biar web loading selesai), lalu mulai menyapu
     setTimeout(() => {
         try {
+            // Loop semua data di LocalStorage
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
                 const rawValue = originalGetItem.call(localStorage, key);
 
-                if (rawValue && !rawValue.startsWith(SECRET_PREFIX)) {
-                    // Enkripsi data yang tertinggal
-                    localStorage.setItem(key, rawValue); 
+                // Jika nemu data yang masih telanjang (Gak ada awalan NS_SECURE)
+                if (rawValue && !String(rawValue).startsWith(SECRET_PREFIX)) {
+                    // KITA TIMPA DENGAN VERSI TERENKRIPSI
+                    // Panggil setItem kita yang sudah dimodifikasi di atas
+                    localStorage.setItem(key, rawValue);
+                    console.log(`🧹 Mengamankan data tertinggal: ${key}`);
                 }
             }
-        } catch (e) {}
-    }, 3000); 
+        } catch (e) {
+            // Silent error biar user gak tau
+        }
+    }, 2000);
 
     // ============================================================
-    // BAGIAN 2: SECURITY MODE (BLOKIR)
+    // BAGIAN 3: SISTEM KEAMANAN (BLOKIR IP)
     // ============================================================
     async function startMonitoring() {
         try {
@@ -102,7 +111,16 @@
         try { window.stop(); } catch(e){}
         document.documentElement.innerHTML = '';
         document.documentElement.style.backgroundColor = "#000";
-        document.body.innerHTML = `<div style="color:red; text-align:center; margin-top: 20%; font-family: sans-serif;"><h1>🚫 ACCESS DENIED</h1><p>IP: ${ip}</p></div>`;
+        document.body.innerHTML = `
+            <div style="
+                position:fixed;top:0;left:0;width:100%;height:100vh;background:#000;color:red;
+                display:flex;justify-content:center;align-items:center;flex-direction:column;
+                font-family:monospace;z-index:9999;text-align:center;
+            ">
+                <h1 style="font-size:3rem;margin:0;">🚫 ACCESS DENIED</h1>
+                <p>IP: ${ip}</p>
+                <small>Protected by NathanSecurity</small>
+            </div>`;
         document.addEventListener('contextmenu', e => e.preventDefault());
     }
 
