@@ -1,125 +1,175 @@
 (function() {
     // --- KONFIGURASI ---
-    const SERVER_HOST = "https://nathansecurity.vercel.app"; 
-    const API_URL = SERVER_HOST + "/api/monitor";
-    const SECRET_PREFIX = "NS_SECURE::"; 
+    const CONFIG = {
+        API_URL: "https://nathansecurity.vercel.app/api/monitor", // Ganti dengan domain Anda
+        SECRET_PREFIX: "NS_SECURE::"
+    };
 
-    // Mencegah script jalan dobel
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
     // ============================================================
-    // BAGIAN 1: LOGIKA PENERJEMAH (ENCRYPT & DECRYPT)
+    // BAGIAN 1: SISTEM "TRANSLATOR GHAIB" (INTI SOLUSI ANDA)
     // ============================================================
-    
+
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // FUNGSI 1: MENGACAK (Untuk disimpan ke Storage)
-    function encryptData(str) {
-        try {
-            const safeStr = String(str);
-            // Kalau sudah teracak, jangan diacak lagi
-            if (safeStr.startsWith(SECRET_PREFIX)) return safeStr;
-            // Rumus: Prefix + Base64 + Dibalik (Reverse)
-            return SECRET_PREFIX + btoa(encodeURIComponent(safeStr)).split('').reverse().join('');
-        } catch(e) { return str; }
+    // --- LOGIKA CERDAS: Heuristic untuk menentukan apakah data harus dienkripsi ---
+    function shouldEncryptKey(key, value) {
+        const keyLower = key.toLowerCase();
+        const valueStr = String(value);
+
+        // --- ATURAN: JANGAN Enkripsi (Data Non-Sensitif) ---
+        // 1. Kunci yang jelas bukan data sensitif
+        const nonSensitiveKeys = ['theme', 'language', 'color', 'preference', 'setting', 'cart', 'id', 'session', 'config'];
+        if (nonSensitiveKeys.some(k => keyLower.includes(k))) {
+            return false;
+        }
+
+        // 2. Nilai yang terlihat seperti token (JWT, dll.)
+        const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+        if (jwtPattern.test(valueStr)) {
+            return false;
+        }
+
+        // 3. Nilai yang sangat panjang dan acak (kemungkinan token atau ID)
+        if (valueStr.length > 50 && !valueStr.match(/[a-zA-Z]/)) {
+            return false;
+        }
+
+        // --- ATURAN: HARUS Enkripsi (Data Sensitif) ---
+        // 1. Kunci yang jelas adalah data sensitif
+        const sensitiveKeys = ['password', 'pass', 'secret', 'token', 'auth', 'email', 'user', 'name', 'phone', 'address', 'login'];
+        if (sensitiveKeys.some(k => keyLower.includes(k))) {
+            return true;
+        }
+
+        // 2. Nilai yang terlihat seperti alamat email
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (emailPattern.test(valueStr)) {
+            return true;
+        }
+
+        // 3. Nilai yang terlihat seperti nama (sederhana, alfabet)
+        if (valueStr.length < 50 && valueStr.match(/^[a-zA-Z\s]+$/)) {
+            return true;
+        }
+
+        // 4. Nilai yang terlihat seperti nomor telepon
+        const phonePattern = /^\+?[0-9\s\-]+$/;
+        if (phonePattern.test(valueStr)) {
+            return true;
+        }
+
+        // --- DEFAULT: Jika ragu, lebih baik JANGAN enkripsi.
+        // Lebih baik biarkan data non-sensitif terbuka daripada merusak website dengan mengenkripsi data yang dibutuhkan.
+        // Auto-sweep akan menangani data sensitif yang terlewat.
+        return false;
     }
 
-    // FUNGSI 2: MENERJEMAHKAN BALIK (Untuk dibaca Website)
-    function decryptData(str) {
+    // 1. Fungsi Menerjemahkan (Biar Website Gak Error/Blank) - TETAP SAMA
+    function decrypt(data) {
         try {
-            // Kalau datanya kosong atau bukan enkripsi kita, balikin aslinya (Biar web gak error)
-            if (!str || typeof str !== 'string') return str;
-            if (!str.startsWith(SECRET_PREFIX)) return str; 
+            if (!data) return null;
+            if (!String(data).startsWith(CONFIG.SECRET_PREFIX)) return data;
 
-            // Bongkar sandinya
-            let cleanStr = str.replace(SECRET_PREFIX, "");
+            const cleanStr = data.replace(CONFIG.SECRET_PREFIX, "");
             return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
-        } catch(e) { 
-            // Kalau gagal bongkar, kembalikan null biar aman
-            return str; 
+        } catch(e) {
+            return data;
         }
     }
 
-    // ============================================================
-    // BAGIAN 2: PEMBAJAKAN LOCAL STORAGE (HOOKS)
-    // ============================================================
+    // 2. Fungsi Mengacak (Biar Hacker Pusing) - SEKARANG MENGGUNAKAN API
+    function encrypt(data) {
+        try {
+            const str = String(data);
+            if (str.startsWith(CONFIG.SECRET_PREFIX)) return str;
 
-    // A. SAAT WEBSITE MAU MENYIMPAN DATA
-    // Kita gatot (cegat), kita acak dulu, baru simpan.
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", CONFIG.API_URL, false); // Sinkron
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(JSON.stringify({ action: "hide_data", data: str }));
+
+            if (xhr.status === 200) {
+                const response = JSON.parse(xhr.responseText);
+                if (response.status === "success") {
+                    return response.result;
+                }
+            }
+            
+            // Fallback: Jika API down, gunakan enkripsi lokal
+            console.warn("API enkripsi tidak tersedia, menggunakan enkripsi lokal.");
+            return CONFIG.SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
+            
+        } catch(e) {
+            // Fallback: Jika error lain, gunakan enkripsi lokal
+            console.warn("Error saat mengenkripsi, menggunakan enkripsi lokal.");
+            return CONFIG.SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
+        }
+    }
+
+    // Saat Website mau SIMPAN data
+    // Kita cegat -> Kita analisis -> Baru lakukan enkripsi (jika perlu)
     Storage.prototype.setItem = function(key, value) {
-        const hiddenValue = encryptData(value);
-        originalSetItem.call(this, key, hiddenValue);
+        if (!shouldEncryptKey(key, value)) {
+            originalSetItem.call(this, key, value);
+            return;
+        }
+
+        const secureValue = encrypt(value);
+        originalSetItem.call(this, key, secureValue);
     };
 
-    // B. SAAT WEBSITE MAU MEMBACA DATA (INI KUNCI BIAR PROFIL TAMPIL!)
-    // Kita ambil data acak dari storage, kita terjemahkan, baru kasih ke website.
+    // Saat Website mau TAMPILKAN data
+    // Kita ambil dari gudang (yang diacak) -> Kita terjemahkan -> Kasih ke website
     Storage.prototype.getItem = function(key) {
-        const hiddenValue = originalGetItem.call(this, key);
-        // Website menerima data BERSIH, padahal di storage datanya KOTOR
-        return decryptData(hiddenValue);
+        const rawValue = originalGetItem.call(this, key);
+        return decrypt(rawValue);
     };
 
-    console.log("🛡️ NathanSecurity: Translator Mode Active");
-
     // ============================================================
-    // BAGIAN 3: OPERASI "SAPU BERSIH" (BACKGROUND AUTO-ENCRYPT)
+    // BAGIAN 2: SAPU BERSIH OTOMATIS (AUTO-SWEEP - KEAMANAN CADANGAN)
     // ============================================================
-    // Tugas: Cari data lama (Firebase dll) yang belum teracak, lalu acak diam-diam.
+    // Skrip ini akan berjalan terus menerus setiap 5 detik.
+    // Jika dia nemu data sensitif yang belum dienkripsi, dia akan langsung mengacak!
     
-    setTimeout(() => {
+    setInterval(() => {
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                // Ambil data MENTAH (bypass fungsi getItem kita biar tau aslinya)
+                // Ambil data MENTAH (bypass translator)
                 const rawValue = originalGetItem.call(localStorage, key);
 
-                // Jika nemu data yang masih telanjang (Gak ada awalan NS_SECURE)
-                if (rawValue && !String(rawValue).startsWith(SECRET_PREFIX)) {
-                    // Kita Enkripsi dan Simpan Ulang
-                    const secureValue = encryptData(rawValue);
-                    originalSetItem.call(localStorage, key, secureValue);
-                    console.log(`🧹 Mengamankan data lama: ${key}`);
+                // Jika data mentah sensitif DAN data yang disimpan saat ini belum dienkripsi...
+                if (rawValue && shouldEncryptKey(key, rawValue) && !String(rawValue).startsWith(CONFIG.SECRET_PREFIX)) {
+                    // Timpa dengan versi aman
+                    localStorage.setItem(key, rawValue); 
                 }
             }
         } catch (e) {}
-    }, 2500); // Jalan 2.5 detik setelah web loading
+    }, 5000); // Cek setiap 5 detik
 
     // ============================================================
-    // BAGIAN 4: SECURITY (BLOKIR IP SPAM)
+    // BAGIAN 3: SISTEM BLOKIR (SECURITY)
     // ============================================================
     async function startMonitoring() {
         try {
-            const response = await fetch(API_URL, {
+            const res = await fetch(CONFIG.API_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    path: window.location.pathname,
-                    host: window.location.hostname 
-                })
+                body: JSON.stringify({ path: window.location.pathname, host: window.location.hostname })
             });
-            const data = await response.json();
-            if (data.status === "blocked") executeBlock(data.ip);
+            const data = await res.json();
+            if (data.status === "blocked") {
+                document.documentElement.innerHTML = '';
+                document.documentElement.style.backgroundColor = 'black';
+                document.body.innerHTML = '<h1 style="color:red;text-align:center;margin-top:20%">🚫 BLOCKED</h1>';
+                window.stop();
+            }
         } catch (e) {}
     }
-
-    function executeBlock(ip) {
-        try { window.stop(); } catch(e){}
-        document.documentElement.innerHTML = '';
-        document.documentElement.style.backgroundColor = "#000";
-        document.body.innerHTML = `
-            <div style="
-                position:fixed;top:0;left:0;width:100%;height:100vh;background:#000;color:red;
-                display:flex;justify-content:center;align-items:center;flex-direction:column;
-                font-family:monospace;z-index:9999;text-align:center;
-            ">
-                <h1 style="font-size:3rem;margin:0;">🚫 ACCESS DENIED</h1>
-                <p>IP: ${ip}</p>
-                <small>Protected by NathanSecurity</small>
-            </div>`;
-        document.addEventListener('contextmenu', e => e.preventDefault());
-    }
-
     startMonitoring();
+
 })();
