@@ -1,10 +1,10 @@
 (function() {
     // --- KONFIGURASI PUSAT ---
-    // Ganti domain ini jika nanti Anda punya domain custom sendiri
     const SERVER_HOST = "https://nathansecurity.vercel.app"; 
     const API_URL = SERVER_HOST + "/api/monitor";
+    const SECRET_PREFIX = "NS_SECURE::"; // Prefix rahasia kita
 
-    // Mencegah script berjalan ganda (Singleton)
+    // Mencegah script berjalan ganda
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
@@ -13,86 +13,102 @@
     // ============================================================
     // BAGIAN 1: FITUR "STEALTH MODE" (MENYEMBUNYIKAN DATA)
     // ============================================================
-    // Fitur ini membajak LocalStorage browser agar datanya terlihat acak
     
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // Fungsi Pengacak (Scrambler) - Ringan & Cepat
+    // Fungsi Pengacak (Scrambler)
     function scramble(str) {
         try {
-            // Menambahkan tanda 'NS::' dan mengacak text base64
-            return "NS::" + btoa(encodeURIComponent(str)).split('').reverse().join('');
+            // Jangan acak lagi kalau sudah teracak
+            if (str.startsWith(SECRET_PREFIX)) return str;
+            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
         } catch(e) { return str; }
     }
 
     // Fungsi Pemulih (Unscrambler)
     function unscramble(str) {
         try {
-            // Cek apakah data ini dienkripsi oleh kita?
-            if (!str || !str.startsWith("NS::")) return str; 
-            
-            // Jika ya, kembalikan ke bentuk asal
-            let cleanStr = str.replace("NS::", "");
+            if (!str || !str.startsWith(SECRET_PREFIX)) return str; 
+            let cleanStr = str.replace(SECRET_PREFIX, "");
             return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
         } catch(e) { return str; }
     }
 
-    // A. PEMBAJAKAN FUNGSI SIMPAN (Saat website mau simpan data)
+    // A. BAJAK FUNGSI SIMPAN
     Storage.prototype.setItem = function(key, value) {
-        // Data asli langsung diacak sebelum masuk memori browser
         const hiddenValue = scramble(String(value));
         originalSetItem.call(this, key, hiddenValue);
     };
 
-    // B. PEMBAJAKAN FUNGSI AMBIL (Saat website butuh datanya kembali)
+    // B. BAJAK FUNGSI AMBIL
     Storage.prototype.getItem = function(key) {
         const hiddenValue = originalGetItem.call(this, key);
-        // Pulihkan data acak menjadi data asli agar website tidak error
         return unscramble(hiddenValue);
     };
 
     console.log("🔒 LocalStorage Obfuscation: ENABLED");
 
+    // ============================================================
+    // BAGIAN 1.5: FITUR "SAPU BERSIH" (SOLUSI FIREBASE)
+    // ============================================================
+    // Ini bagian PENTING yang belum ada di kode Anda sebelumnya.
+    // Script ini akan menunggu 1.5 detik, lalu mengecek apakah ada data 'telanjang'.
+    // Jika ada, langsung diacak paksa!
+    
+    setTimeout(() => {
+        try {
+            console.log("🧹 NathanSecurity: Menyapu data lama...");
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                // Kita ambil pakai originalGetItem biar tau wujud aslinya
+                const rawValue = originalGetItem.call(localStorage, key);
+
+                // Jika datanya ada TAPI tidak punya awalan rahasia kita...
+                if (rawValue && !rawValue.startsWith(SECRET_PREFIX)) {
+                    // ...Simpan ulang (otomatis kena acak oleh fungsi setItem kita)
+                    localStorage.setItem(key, rawValue); 
+                    console.log(`   -> Data '${key}' berhasil diamankan.`);
+                }
+            }
+        } catch (e) {
+            console.error("Gagal menyapu data:", e);
+        }
+    }, 1500); 
+
 
     // ============================================================
     // BAGIAN 2: FITUR "SECURITY MODE" (BLOKIR IP SPAM)
     // ============================================================
-    // Fitur ini menghubungi Python di Vercel untuk cek status IP
-    
     async function startMonitoring() {
         try {
             const response = await fetch(API_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    path: window.location.pathname, // Halaman yang dibuka
-                    host: window.location.hostname  // Website klien
+                    path: window.location.pathname,
+                    host: window.location.hostname 
                 })
             });
 
             const data = await response.json();
 
-            // JIKA STATUS DIBLOKIR -> EKSEKUSI MATI
             if (data.status === "blocked") {
                 executeBlock(data.ip);
             }
 
         } catch (e) {
-            // Fail-safe: Jika server Vercel down, website klien tetap jalan normal
             console.warn("NathanSecurity: Server check skipped.");
         }
     }
 
-    // FUNGSI LAYAR HITAM (BLOCK SCREEN)
+    // FUNGSI LAYAR HITAM
     function executeBlock(ip) {
-        try { window.stop(); } catch(e){} // Paksa berhenti loading
+        try { window.stop(); } catch(e){}
         
-        // Hapus seluruh tampilan website asli
         document.documentElement.innerHTML = '';
         document.documentElement.style.backgroundColor = "#000";
 
-        // Tampilkan Pesan Peringatan
         document.body.innerHTML = `
             <div style="
                 position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
@@ -104,17 +120,12 @@
                 <h1 style="font-size: 3.5rem; color: #ff0000; margin-bottom: 10px; text-shadow: 0 0 10px #ff0000;">
                     🚫 ACCESS DENIED
                 </h1>
-                
                 <div style="border: 1px solid #330000; background: #1a0000; padding: 20px; border-radius: 8px; max-width: 500px;">
-                    <h3 style="color: #ffcccc; margin: 0 0 10px 0; text-transform: uppercase;">
-                        Suspicious Activity Detected
-                    </h3>
+                    <h3 style="color: #ffcccc; margin: 0 0 10px 0;">Suspicious Activity</h3>
                     <p style="color: #ff6666; font-size: 1rem;">
-                        Sistem mendeteksi perilaku Spam Refresh atau Scanning dari perangkat Anda.
-                        Akses diblokir sementara demi keamanan.
+                        Sistem mendeteksi perilaku tidak wajar (Spam/Scanning).
                     </p>
                 </div>
-
                 <div style="margin-top: 30px; color: #444; font-size: 0.8rem;">
                     <p>IP Address: <span style="color: #666;">${ip || 'Hidden'}</span></p>
                     <p>Protected by <b>NathanSecurity</b></p>
@@ -122,16 +133,10 @@
             </div>
         `;
 
-        // Matikan Klik Kanan
         document.addEventListener('contextmenu', event => event.preventDefault());
-        
-        // Matikan Keyboard (F12, Ctrl+U, dll)
-        document.onkeydown = function(e) {
-            return false;
-        }
+        document.onkeydown = function(e) { return false; }
     }
 
-    // JALANKAN PENGECEKAN KEAMANAN SEKARANG
     startMonitoring();
 
 })();
