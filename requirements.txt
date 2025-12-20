@@ -1,1 +1,1 @@
-upstash-redis==0.16.0
+upstash-redis
