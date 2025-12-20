@@ -15,55 +15,59 @@
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // --- LOGIKA CERDAS: Heuristic untuk menentukan apakah data harus dienkripsi ---
-    function shouldEncryptKey(key, value) {
-        const keyLower = key.toLowerCase();
+    // --- LOGIKA CERDAS: Heuristic yang lebih General (Fokus pada Value) ---
+    function shouldEncryptData(value) {
         const valueStr = String(value);
 
         // --- ATURAN: JANGAN Enkripsi (Data Non-Sensitif) ---
-        // 1. Kunci yang jelas bukan data sensitif
-        const nonSensitiveKeys = ['theme', 'language', 'color', 'preference', 'setting', 'cart', 'id', 'session', 'config'];
-        if (nonSensitiveKeys.some(k => keyLower.includes(k))) {
-            return false;
-        }
-
-        // 2. Nilai yang terlihat seperti token (JWT, dll.)
+        // 1. Nilai yang terlihat seperti Token (JWT, dll.)
         const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
         if (jwtPattern.test(valueStr)) {
             return false;
         }
 
-        // 3. Nilai yang sangat panjang dan acak (kemungkinan token atau ID)
+        // 2. Nilai yang terlihat seperti ID unik (UUID)
+        const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+        if (uuidPattern.test(valueStr)) {
+            return false;
+        }
+
+        // 3. Nilai yang sangat panjang dan acak (kemungkinan token, ID, atau hash)
         if (valueStr.length > 50 && !valueStr.match(/[a-zA-Z]/)) {
             return false;
         }
 
-        // --- ATURAN: HARUS Enkripsi (Data Sensitif) ---
-        // 1. Kunci yang jelas adalah data sensitif
-        const sensitiveKeys = ['password', 'pass', 'secret', 'token', 'auth', 'email', 'user', 'name', 'phone', 'address', 'login'];
-        if (sensitiveKeys.some(k => keyLower.includes(k))) {
-            return true;
+        // 4. Nilai yang jelas bukan string (boolean, number, null, dll.)
+        if (typeof value !== 'string') {
+            return false;
         }
 
-        // 2. Nilai yang terlihat seperti alamat email
+        // --- ATURAN: HARUS Enkripsi (Data Sensitif) ---
+        // 1. Nilai yang terlihat seperti alamat email
         const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (emailPattern.test(valueStr)) {
             return true;
         }
 
-        // 3. Nilai yang terlihat seperti nama (sederhana, alfabet)
-        if (valueStr.length < 50 && valueStr.match(/^[a-zA-Z\s]+$/)) {
-            return true;
-        }
-
-        // 4. Nilai yang terlihat seperti nomor telepon
+        // 2. Nilai yang terlihat seperti nomor telepon
         const phonePattern = /^\+?[0-9\s\-]+$/;
         if (phonePattern.test(valueStr)) {
             return true;
         }
 
+        // 3. Nilai yang terlihat seperti nama (sederhana, alfabet dan spasi)
+        if (valueStr.length < 50 && valueStr.match(/^[a-zA-Z\s]+$/)) {
+            return true;
+        }
+
+        // 4. Nilai yang terlihat seperti URL dengan kredensial (misal: user:pass)
+        const urlWithCredsPattern = /^(https?:\/\/)?[^\s\/:]+:[^\s\/@]+@/i;
+        if (urlWithCredsPattern.test(valueStr)) {
+            return true;
+        }
+
         // --- DEFAULT: Jika ragu, lebih baik JANGAN enkripsi.
-        // Lebih baik biarkan data non-sensitif terbuka daripada merusak website dengan mengenkripsi data yang dibutuhkan.
+        // Lebih baik biarkan data non-sensitif terbuka daripada merusak website.
         // Auto-sweep akan menangani data sensitif yang terlewat.
         return false;
     }
@@ -111,15 +115,15 @@
     }
 
     // Saat Website mau SIMPAN data
-    // Kita cegat -> Kita analisis -> Baru lakukan enkripsi (jika perlu)
+    // Kita cegat -> Kita analisis isi datanya -> Baru lakukan enkripsi (jika perlu)
     Storage.prototype.setItem = function(key, value) {
-        if (!shouldEncryptKey(key, value)) {
+        // Jika nilai data sensitif, enkripsi. Jika tidak, simpan aslinya.
+        if (shouldEncryptData(value)) {
+            const secureValue = encrypt(value);
+            originalSetItem.call(this, key, secureValue);
+        } else {
             originalSetItem.call(this, key, value);
-            return;
         }
-
-        const secureValue = encrypt(value);
-        originalSetItem.call(this, key, secureValue);
     };
 
     // Saat Website mau TAMPILKAN data
@@ -143,7 +147,7 @@
                 const rawValue = originalGetItem.call(localStorage, key);
 
                 // Jika data mentah sensitif DAN data yang disimpan saat ini belum dienkripsi...
-                if (rawValue && shouldEncryptKey(key, rawValue) && !String(rawValue).startsWith(CONFIG.SECRET_PREFIX)) {
+                if (rawValue && shouldEncryptData(rawValue) && !String(rawValue).startsWith(CONFIG.SECRET_PREFIX)) {
                     // Timpa dengan versi aman
                     localStorage.setItem(key, rawValue); 
                 }
