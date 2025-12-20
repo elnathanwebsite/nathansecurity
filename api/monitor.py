@@ -4,6 +4,7 @@ import os
 import base64
 from upstash_redis import Redis
 from cryptography.fernet import Fernet
+import re
 
 # --- 1. KONEKSI DATABASE (UPSTASH) ---
 redis = Redis(
@@ -12,7 +13,6 @@ redis = Redis(
 )
 
 # --- 2. SETUP KUNCI ENKRIPSI (FERNET) ---
-# Digunakan untuk pengamanan tingkat tinggi
 encrypt_key = os.environ.get("ENCRYPTION_KEY")
 if not encrypt_key:
     encrypt_key = Fernet.generate_key()
@@ -23,9 +23,11 @@ BLOCK_DURATION = 3600  # 1 Jam
 REFRESH_LIMIT = 5      # Max refresh 5x
 SCAN_LIMIT = 2         # Max scan 2x
 
+# --- 4. KONFIGURASI LOGGING (Lapisan Baru) ---
+ENCRYPTION_LOG_KEY = "encryption_log" # Kunci Redis untuk menyimpan log
+
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
-        # Mengatur Header agar bisa diakses dari domain mana saja (CORS)
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -42,15 +44,13 @@ class handler(BaseHTTPRequestHandler):
             # ==========================================
             # FITUR 1: HIDE DATA / "HASHING VISUAL"
             # ==========================================
-            # Ini yang Anda minta untuk menyembunyikan Email/Firebase
-            # Kita gunakan Base64 Terbalik (Reversible) agar Website tidak error
             if action == 'hide_data':
                 payload = str(body.get('data', ''))
                 
-                # Langkah 1: Ubah ke format Base64
+                # --- Lapisan Baru: Log Attempt ---
+                self.log_encryption_attempt(payload)
+                
                 encoded = base64.b64encode(payload.encode()).decode()
-                # Langkah 2: Balik urutan hurufnya (Reverse) biar tidak terbaca manusia
-                # Langkah 3: Tambahkan stempel "NS_SECURE::"
                 hidden_result = "NS_SECURE::" + encoded[::-1]
                 
                 self.send_json_response({"status": "success", "result": hidden_result})
@@ -59,7 +59,6 @@ class handler(BaseHTTPRequestHandler):
             # ==========================================
             # FITUR 2: ENKRIPSI MILITER (FERNET)
             # ==========================================
-            # Gunakan ini jika ingin keamanan level bank (Data tidak bisa dibaca tanpa kunci server)
             if action in ['encrypt', 'decrypt']:
                 payload = body.get('data')
                 result = ""
@@ -83,12 +82,10 @@ class handler(BaseHTTPRequestHandler):
             client_ip = self.headers.get('x-forwarded-for', 'unknown').split(',')[0]
             current_path = body.get('path', '/')
 
-            # 1. Cek Daftar Blokir
             if redis.get(f"block:{client_ip}"):
                 self.respond_blocked(client_ip)
                 return
 
-            # 2. Logika Anti-Spam Refresh
             refresh_key = f"count:{client_ip}:{current_path}"
             count = redis.incr(refresh_key)
             if count == 1:
@@ -99,7 +96,6 @@ class handler(BaseHTTPRequestHandler):
                 self.respond_blocked(client_ip)
                 return
 
-            # 3. Logika Anti-Scanning
             scan_key = f"scan:{client_ip}"
             redis.sadd(scan_key, current_path)
             redis.expire(scan_key, 10)
@@ -109,11 +105,9 @@ class handler(BaseHTTPRequestHandler):
                 self.respond_blocked(client_ip)
                 return
 
-            # 4. Jika Aman
             self.send_json_response({"status": "allowed"})
 
         except Exception as e:
-            # Error Handling
             self.send_response(500)
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
@@ -129,3 +123,30 @@ class handler(BaseHTTPRequestHandler):
 
     def respond_blocked(self, ip):
         self.send_json_response({"status": "blocked", "ip": ip})
+
+    # --- Lapisan Baru: Fungsi untuk Menganalisis dan Mencatat Upaya Enkripsi ---
+    def log_encryption_attempt(self, data):
+        """Menganalisis data dan mencatat jenisnya ke Redis."""
+        data_type = "unknown"
+        data_str = str(data).lower()
+
+        if re.search(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', data_str):
+            data_type = "email"
+        elif re.search(r'\+?[0-9\s\-]+', data_str):
+            data_type = "phone"
+        elif re.search(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', data_str, re.I):
+            data_type = "uuid"
+        elif re.search(r'^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$', data_str):
+            data_type = "jwt_token"
+        elif len(data_str) > 50 and not data_str.isalpha():
+            data_type = "long_string_or_id"
+
+        # Simpan log ke Redis (misalnya, hanya 100 log terakhir)
+        log_entry = {
+            "timestamp": int(os.time()),
+            "client_ip": self.headers.get('x-forwarded-for', 'unknown').split(',')[0],
+            "data_type": data_type,
+            "data_preview": data_str[:50] + "..." if len(data_str) > 50 else data_str
+        }
+        redis.lpush(ENCRYPTION_LOG_KEY, json.dumps(log_entry))
+        redis.ltrim(ENCRYPTION_LOG_KEY, 0, 99) # Pertahankan hanya 100 log terakhir
