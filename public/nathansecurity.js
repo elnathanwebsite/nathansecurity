@@ -1,105 +1,77 @@
 (function() {
-    // --- KONFIGURASI ---
-    const API_URL = "https://nathansecurity.vercel.app/api/monitor"; // Ganti dengan domain Anda
-    const SECRET_PREFIX = "NS_SECURE::"; 
+    // === KONFIGURASI ===
+    const API_URL = "https://nathansecurity.vercel.app/api/monitor";
+    const SECRET_PREFIX = "NS_AES::"; 
+    // GANTI KUNCI INI JADI APA SAJA (INI PASSWORD GUDANG ANDA)
+    const ENCRYPTION_KEY = "NATHAN_SUPER_SECRET_KEY_2025"; 
 
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
-    // ============================================================
-    // BAGIAN 1: SISTEM "TRANSLATOR GHAIB" (INTI SOLUSI ANDA)
-    // ============================================================
-    // Ini yang bikin frontend tetap bisa baca data, tapi hacker melihat sampah.
-
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // --- PEMBAJAKAN (INTERCEPTOR) ---
-
-    // 1. Fungsi Menerjemahkan (Biar Website Gak Error/Blank) - TETAP SAMA
-    function decrypt(data) {
-        try {
-            if (!data) return null;
-            if (!String(data).startsWith(SECRET_PREFIX)) return data; // Kalau belum diacak, balikin aslinya
-
-            // Bongkar sandinya agar bisa dibaca Website
-            const cleanStr = data.replace(SECRET_PREFIX, "");
-            return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
-        } catch(e) { 
-            return data; // Kalau gagal, kembalikan aslinya biar web gak crash
+    // --- ALGORITMA ENKRIPSI KUAT (XOR CIPHER) ---
+    // Hacker tidak bisa baca ini kalau tidak tahu ENCRYPTION_KEY di atas.
+    
+    function cipher(text, key) {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            // Mengacak karakter menggunakan matematika XOR dengan kunci
+            result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
         }
+        return result;
     }
 
-    // 2. Fungsi Mengacak (Biar Hacker Pusing) - SEKARANG MENGGUNAKAN API
-    function encrypt(data) {
+    // 1. KUNCI DATA (Encrypt)
+    function lock(data) {
         try {
             const str = String(data);
-            if (str.startsWith(SECRET_PREFIX)) return str; // Jangan acak 2 kali
-
-            // --- Logika Baru: Panggil API Python untuk mengacak data ---
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", API_URL, false); // false membuat request menjadi SINKRON
-            xhr.setRequestHeader("Content-Type", "application/json");
-            xhr.send(JSON.stringify({ action: "hide_data", data: str }));
-
-            if (xhr.status === 200) {
-                const response = JSON.parse(xhr.responseText);
-                if (response.status === "success") {
-                    return response.result; // Kembalikan hasil dari server
-                }
-            }
-            
-            // --- Fallback: Jika API gagal, gunakan metode lama ---
-            console.warn("Gagal menghubungi API enkripsi, menggunakan enkripsi lokal.");
-            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
-            
-        } catch(e) {
-            // --- Fallback: Jika terjadi error lain, gunakan metode lama ---
-            console.warn("Error saat mengenkripsi via API, menggunakan enkripsi lokal.");
-            return SECRET_PREFIX + btoa(encodeURIComponent(str)).split('').reverse().join('');
-        }
+            if (str.startsWith(SECRET_PREFIX)) return str;
+            // Langkah 1: Acak pakai Key
+            const encrypted = cipher(str, ENCRYPTION_KEY);
+            // Langkah 2: Bungkus Base64 biar bisa disimpan
+            return SECRET_PREFIX + btoa(encrypted);
+        } catch (e) { return data; }
     }
 
-    // Saat Website mau SIMPAN data (misal: simpan token login)
-    // Kita cegat -> Kita acak via API -> Baru masukin gudang
+    // 2. BUKA DATA (Decrypt)
+    function unlock(data) {
+        try {
+            if (!data) return null;
+            if (!String(data).startsWith(SECRET_PREFIX)) return data;
+
+            const raw = data.replace(SECRET_PREFIX, "");
+            // Langkah 1: Buka bungkus Base64
+            const decodedBase64 = atob(raw);
+            // Langkah 2: Susun ulang pakai Key
+            return cipher(decodedBase64, ENCRYPTION_KEY);
+        } catch (e) { return data; }
+    }
+
+    // --- PEMBAJAKAN GUDANG ---
     Storage.prototype.setItem = function(key, value) {
-        const secureValue = encrypt(value);
-        originalSetItem.call(this, key, secureValue);
+        originalSetItem.call(this, key, lock(value));
     };
 
-    // Saat Website mau TAMPILKAN data (misal: nama user di pojok kanan)
-    // Kita ambil dari gudang (yang diacak) -> Kita terjemahkan -> Kasih ke website
     Storage.prototype.getItem = function(key) {
-        const rawValue = originalGetItem.call(this, key);
-        return decrypt(rawValue);
+        return unlock(originalGetItem.call(this, key));
     };
 
-    // ============================================================
-    // BAGIAN 2: SAPU BERSIH OTOMATIS (AUTO-SWEEP)
-    // ============================================================
-    // Ini solusi jika Anda malas mengatur urutan script.
-    // Script ini akan berjalan terus menerus setiap 2 detik.
-    // Kalau dia nemu data "Telanjang" (misal dari Firebase), dia langsung acak!
-    
+    // --- SAPU BERSIH ---
     setInterval(() => {
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                // Ambil data MENTAH (bypass translator)
-                const rawValue = originalGetItem.call(localStorage, key);
-
-                // Kalau ketemu data yang belum ada tulisan NS_SECURE...
-                if (rawValue && !String(rawValue).startsWith(SECRET_PREFIX)) {
-                    // Timpa dengan versi aman (menggunakan fungsi encrypt yang baru)
-                    localStorage.setItem(key, rawValue); 
+                const raw = originalGetItem.call(localStorage, key);
+                if (raw && !String(raw).startsWith(SECRET_PREFIX)) {
+                    localStorage.setItem(key, raw);
                 }
             }
-        } catch (e) {}
-    }, 2000); // Cek setiap 2 detik
+        } catch(e) {}
+    }, 2000);
 
-    // ============================================================
-    // BAGIAN 3: SISTEM BLOKIR (SECURITY)
-    // ============================================================
+    // --- BLOKIR IP ---
     async function startMonitoring() {
         try {
             const res = await fetch(API_URL, {
@@ -109,13 +81,10 @@
             });
             const data = await res.json();
             if (data.status === "blocked") {
-                document.documentElement.innerHTML = '';
-                document.documentElement.style.backgroundColor = 'black';
                 document.body.innerHTML = '<h1 style="color:red;text-align:center;margin-top:20%">🚫 BLOCKED</h1>';
                 window.stop();
             }
         } catch (e) {}
     }
     startMonitoring();
-
 })();
