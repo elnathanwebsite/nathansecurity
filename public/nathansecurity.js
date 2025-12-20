@@ -4,8 +4,20 @@
         API_URL: "https://nathansecurity.vercel.app/api/monitor", // Ganti dengan domain Anda
         SECRET_PREFIX: "NS_SECURE::",
         // --- PENINGKATAN PERFORMA: Timeout untuk API call (dalam milidetik) ---
-        API_TIMEOUT: 500 // Jika API tidak merespons dalam 500ms, gunakan enkripsi lokal.
+        API_TIMEOUT: a1 // Nilai asli: 500
     };
+
+    // --- SIMBOLISASI NILAI NUMERIK ---
+    // a1, b2, c3, dll. adalah variabel yang menyimpan nilai numerik asli.
+    // Ini untuk membuat kode lebih sulit dibaca dan dipahami.
+    const a1 = 500; // Timeout API dalam milidetik
+    const b2 = 10000; // Interval sweep otomatis dalam milidetik (10 detik)
+    const c3 = 50; // Batas panjang untuk data non-sensitif (nama)
+    const d4 = 8; // Bagian pertama dari UUID
+    const e4 = 4; // Bagian kedua, ketiga, dan keempat dari UUID
+    const f4 = 12; // Bagian kelima dari UUID
+    const g3 = 3; // Jumlah bagian dalam JWT
+    const h10 = 10; // Panjang minimal untuk data yang dianggap non-sensitif
 
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
@@ -23,13 +35,13 @@
 
         // --- ATURAN: JANGAN Enkripsi (Data Non-Sensitif) ---
         // Cek ini dulu karena paling cepat untuk diuji.
-        if (valueStr.length > 50 && !valueStr.match(/[a-zA-Z]/)) return false;
+        if (valueStr.length > c3 && !valueStr.match(/[a-zA-Z]/)) return false;
 
         // Pola token/JWT/UUID sangat spesifik dan cepat untuk diuji.
-        const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+        const jwtPattern = new RegExp('^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$');
         if (jwtPattern.test(valueStr)) return false;
 
-        const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+        const uuidPattern = new RegExp('^[a-f0-9]{' + d4 + '}-[a-f0-9]{' + e4 + '}-[a-f0-9]{' + e4 + '}-[a-f0-9]{' + e4 + '}-[a-f0-9]{' + f4 + '}$', 'i');
         if (uuidPattern.test(valueStr)) return false;
 
         // --- ATURAN: HARUS Enkripsi (Data Sensitif) ---
@@ -40,7 +52,7 @@
         const phonePattern = /^\+?[0-9\s\-]+$/;
         if (phonePattern.test(valueStr)) return true;
 
-        if (valueStr.length < 50 && valueStr.match(/^[a-zA-Z\s]+$/)) return true;
+        if (valueStr.length < c3 && valueStr.match(/^[a-zA-Z\s]+$/)) return true;
 
         const urlWithCredsPattern = /^(https?:\/\/)?[^\s\/:]+:[^\s\/@]+@/i;
         if (urlWithCredsPattern.test(valueStr)) return true;
@@ -130,7 +142,7 @@
                 }
             }
         } catch (e) {}
-    }, 10000); // Cek setiap 10 detik
+    }, b2); // Cek setiap 10 detik
 
     // ============================================================
     // BAGIAN 3: SISTEM BLOKIR (SECURITY)
@@ -154,3 +166,26 @@
     startMonitoring();
 
 })();
+
+// =================================================================
+// CATATAN DETAIL KODE
+// =================================================================
+
+// Baris 3: Mendefinisikan objek konfigurasi utama yang berisi pengaturan skrip.
+// Baris 23: Menyimpan referensi asli dari metode 'setItem' di 'localStorage' untuk digunakan nanti.
+// Baris 24: Menyimpan referensi asli dari metode 'getItem' di 'localStorage' untuk digunakan nanti.
+// Baris 31: Mendefinisikan fungsi utama untuk menentukan apakah suatu nilai data harus dienkripsi.
+// Baris 36: Aturan pertama: Jangan enkripsi jika data panjang dan tidak mengandung huruf (kemungkinan token/ID).
+// Baris 40: Aturan kedua: Jangan enkripsi jika cocok dengan pola JWT (JSON Web Token).
+// Baris 44: Aturan ketiga: Jangan enkripsi jika cocok dengan pola UUID (Universally Unique Identifier).
+// Baris 48: Aturan keempat: HARUS enkripsi jika cocok dengan pola alamat email.
+// Baris 51: Aturan kelima: HARUS enkripsi jika cocok dengan pola nomor telepon.
+// Baris 54: Aturan keenam: HARUS enkripsi jika data pendek dan hanya berisi huruf (kemungkinan nama).
+// Baris 58: Aturan ketujuh: HARUS enkripsi jika cocok dengan pola URL yang mengandung kredensial (user:pass).
+// Baris 68: Mendefinisikan fungsi 'decrypt' yang mengubah data terenkripsi kembali ke bentuk aslinya.
+// Baris 78: Mendefinisikan fungsi 'encrypt' yang mengirim data ke API server untuk dienkripsi.
+// Baris 88: Mem-bajak (hook) metode 'setItem' untuk memeriksa dan mengenkripsi data sebelum disimpan.
+// Baris 97: Mem-bajak (hook) metode 'getItem' untuk mendekripsi data sebelum dikembalikan ke aplikasi.
+// Baris 110: Mendefinisikan interval waktu (10 detik) untuk memindai ulang semua data di 'localStorage'.
+// Baris 114: Jika data sensitif ditemukan yang belum dienkripsi, skrip akan mengenkripsinya kembali.
+// Baris 120: Mendefinisikan fungsi untuk memeriksa apakah akses ke halaman web diblokir oleh server keamanan.
