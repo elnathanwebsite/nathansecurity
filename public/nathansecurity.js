@@ -4,93 +4,90 @@
     const API_URL = SERVER_HOST + "/api/monitor";
     const SECRET_PREFIX = "NS_SECURE::"; 
 
-    // Singleton Pattern (Biar gak jalan dobel)
+    // Mencegah script jalan dobel
     if (window.nathanSecurityActive) return;
     window.nathanSecurityActive = true;
 
     // ============================================================
-    // BAGIAN 1: INTELLIGENT STEALTH MODE (ANTI-CRASH)
+    // BAGIAN 1: LOGIKA PENERJEMAH (ENCRYPT & DECRYPT)
     // ============================================================
     
     const originalSetItem = Storage.prototype.setItem;
     const originalGetItem = Storage.prototype.getItem;
 
-    // Fungsi Pengacak (Hanya mengacak jika belum diacak)
-    function scramble(str) {
+    // FUNGSI 1: MENGACAK (Untuk disimpan ke Storage)
+    function encryptData(str) {
         try {
             const safeStr = String(str);
+            // Kalau sudah teracak, jangan diacak lagi
             if (safeStr.startsWith(SECRET_PREFIX)) return safeStr;
-            // Enkripsi Base64 + Reverse
+            // Rumus: Prefix + Base64 + Dibalik (Reverse)
             return SECRET_PREFIX + btoa(encodeURIComponent(safeStr)).split('').reverse().join('');
         } catch(e) { return str; }
     }
 
-    // Fungsi Pemulih (KUNCI ANTI-CRASH DISINI!)
-    function unscramble(str) {
+    // FUNGSI 2: MENERJEMAHKAN BALIK (Untuk dibaca Website)
+    function decryptData(str) {
         try {
-            if (!str) return str;
-            
-            // CEK DULU: Apakah ini data terenkripsi buatan kita?
-            if (!String(str).startsWith(SECRET_PREFIX)) {
-                // JIKA TIDAK: Berarti ini data lama atau Firebase loading duluan.
-                // KEMBALIKAN APA ADANYA biar website tidak error!
-                return str; 
-            }
+            // Kalau datanya kosong atau bukan enkripsi kita, balikin aslinya (Biar web gak error)
+            if (!str || typeof str !== 'string') return str;
+            if (!str.startsWith(SECRET_PREFIX)) return str; 
 
-            // JIKA YA: Baru kita bongkar sandinya
+            // Bongkar sandinya
             let cleanStr = str.replace(SECRET_PREFIX, "");
             return decodeURIComponent(atob(cleanStr.split('').reverse().join('')));
         } catch(e) { 
-            // Fail-safe: Jika gagal decode, kembalikan aslinya.
+            // Kalau gagal bongkar, kembalikan null biar aman
             return str; 
         }
     }
 
-    // A. PEMBAJAKAN FUNGSI SIMPAN
-    // Setiap kali website mau nyimpen data baru, KITA PAKSA ENKRIPSI.
+    // ============================================================
+    // BAGIAN 2: PEMBAJAKAN LOCAL STORAGE (HOOKS)
+    // ============================================================
+
+    // A. SAAT WEBSITE MAU MENYIMPAN DATA
+    // Kita gatot (cegat), kita acak dulu, baru simpan.
     Storage.prototype.setItem = function(key, value) {
-        const hiddenValue = scramble(String(value));
+        const hiddenValue = encryptData(value);
         originalSetItem.call(this, key, hiddenValue);
     };
 
-    // B. PEMBAJAKAN FUNGSI AMBIL
-    // Setiap kali website minta data, kita cek dulu statusnya.
+    // B. SAAT WEBSITE MAU MEMBACA DATA (INI KUNCI BIAR PROFIL TAMPIL!)
+    // Kita ambil data acak dari storage, kita terjemahkan, baru kasih ke website.
     Storage.prototype.getItem = function(key) {
-        const storedValue = originalGetItem.call(this, key);
-        return unscramble(storedValue);
+        const hiddenValue = originalGetItem.call(this, key);
+        // Website menerima data BERSIH, padahal di storage datanya KOTOR
+        return decryptData(hiddenValue);
     };
 
-    console.log("🛡️ NathanSecurity: Hybrid Stealth Mode Active");
+    console.log("🛡️ NathanSecurity: Translator Mode Active");
 
     // ============================================================
-    // BAGIAN 2: OPERASI SAPU BERSIH (BACKGROUND TASK)
+    // BAGIAN 3: OPERASI "SAPU BERSIH" (BACKGROUND AUTO-ENCRYPT)
     // ============================================================
-    // Karena kita membiarkan data lama terbaca (biar gak crash),
-    // Kita perlu "Sapu Bersih" pelan-pelan agar semuanya jadi terenkripsi.
+    // Tugas: Cari data lama (Firebase dll) yang belum teracak, lalu acak diam-diam.
     
-    // Tunggu 2 detik (biar web loading selesai), lalu mulai menyapu
     setTimeout(() => {
         try {
-            // Loop semua data di LocalStorage
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
+                // Ambil data MENTAH (bypass fungsi getItem kita biar tau aslinya)
                 const rawValue = originalGetItem.call(localStorage, key);
 
                 // Jika nemu data yang masih telanjang (Gak ada awalan NS_SECURE)
                 if (rawValue && !String(rawValue).startsWith(SECRET_PREFIX)) {
-                    // KITA TIMPA DENGAN VERSI TERENKRIPSI
-                    // Panggil setItem kita yang sudah dimodifikasi di atas
-                    localStorage.setItem(key, rawValue);
-                    console.log(`🧹 Mengamankan data tertinggal: ${key}`);
+                    // Kita Enkripsi dan Simpan Ulang
+                    const secureValue = encryptData(rawValue);
+                    originalSetItem.call(localStorage, key, secureValue);
+                    console.log(`🧹 Mengamankan data lama: ${key}`);
                 }
             }
-        } catch (e) {
-            // Silent error biar user gak tau
-        }
-    }, 2000);
+        } catch (e) {}
+    }, 2500); // Jalan 2.5 detik setelah web loading
 
     // ============================================================
-    // BAGIAN 3: SISTEM KEAMANAN (BLOKIR IP)
+    // BAGIAN 4: SECURITY (BLOKIR IP SPAM)
     // ============================================================
     async function startMonitoring() {
         try {
