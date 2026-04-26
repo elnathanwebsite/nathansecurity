@@ -365,6 +365,6 @@
         document.body.innerHTML = `<div class="c"><div class="ic">⛔</div><h1>${title}</h1><p>${reason}<br><br>Akses Anda telah diblokir permanen.</p><div class="f">Nathan Security</div></div>`;
     }
 
-    console.log('%c🛡️ Nathan Security Shield v3 Active Langung Donate ke 083180667700 DANA', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
+    console.log('%c🛡️ Nathan Security Shield v3 Active', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
 
 })();
