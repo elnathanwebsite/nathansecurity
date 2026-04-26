@@ -61,7 +61,7 @@
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD + PREMIUM UI
+// 🛡️ INVISIBLE SECURITY SHIELD + UI GAMBAR BESAR
 // ==========================================
 (function() {
     'use strict';
@@ -128,9 +128,6 @@
         } catch (e) {}
     }, 5000);
 
-    // ==========================================
-    // SPLIT HEARTBEAT
-    // ==========================================
     let isCondemned = false;
     async function startHealthCheck() {
         if (isCondemned) return;
@@ -144,26 +141,10 @@
     startHealthCheck();
 
     // ==========================================
-    // UI NOTIFIKASI GAMBAR BESAR + DETAIL FUNGSI
+    // UI POP UP TERBARU
     // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
-
-    // Ikon Vector Resmi
-    const iconGo = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="24" height="24" rx="5" fill="#00ADD8"/>
-        <path d="M7.5 7.5L12 5L16.5 7.5V11.5L12 14.5L7.5 11.5V7.5Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M12 14.5V19" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="M7.5 11.5L4 13.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="M16.5 11.5L20 13.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="12" y="9" font-family="Arial" font-size="4" font-weight="bold" fill="white" text-anchor="middle">GO</text>
-    </svg>`;
-
-    const iconPython = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C9.24 2 9 3.11 9 4.5V7H12.5V8H7.5C6.11 8 5 9.24 5 11v2.5c0 1.38 1.12 2.5 2.5 2.5H9v2.5c0 1.38 1.24 2.5 3 2.5s3-1.12 3-2.5V16h-3.5v-1H17c1.38 0 2.5-1.12 2.5-2.5V11c0-1.38-1.12-2.5-2.5-2.5H15V4.5C15 3.11 14.76 2 12 2zM9.5 17.5a.75.75 0 110 1.5.75.75 0 010-1.5zm5-11a.75.75 0 110 1.5.75.75 0 010-1.5z" fill="#3776AB"/>
-    </svg>`;
-
-    const iconInfo = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
 
     document.addEventListener('contextmenu', function(e) {
         e.preventDefault();
@@ -175,11 +156,8 @@
 
         securityPopup = document.createElement('div');
         securityPopup.innerHTML = `
-            <!-- GAMBAR UTAMA DI POP UP -->
             <div style="text-align: center; margin-bottom: 16px; border-bottom: 1px solid #f3f4f6; padding-bottom: 14px;">
-                <img src="https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png" 
-                     alt="Nathan Security" 
-                     style="height: 64px; width: auto; border-radius: 8px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));">
+                <img src="https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png" alt="Logo" style="height: 60px; width: auto; border-radius: 8px; object-fit: contain;">
                 <div style="margin-top: 8px; font-weight: 600; font-size: 14px; color: #111827;">Nathan Security</div>
                 <div style="font-size: 11px; color: #6b7280;">Hybrid Engine Active</div>
             </div>
@@ -188,41 +166,31 @@
                 Akses inspeksi halaman dibatasi untuk melindungi integritas data.
             </div>
             
-            <!-- DETAIL FUNGSI PYTHON & GOLANG -->
-            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+            <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px;">
                 
-                <!-- GOLANG SECTION -->
                 <div style="display: flex; gap: 12px;">
-                    <div style="flex-shrink: 0; margin-top: 1px;">${iconGo}</div>
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Gopher_Front_View.png/120px-Gopher_Front_View.png" alt="Go" style="width: 24px; height: 24px; object-fit: contain; margin-top: 1px;">
                     <div>
-                        <div style="font-weight: 600; font-size: 13px; color: #111827; margin-bottom: 3px;">Golang</div>
-                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5;">
-                            Bertindak sebagai mesin performa. Menangani cache super cepat di RAM, routing lalu lintas data, dan menangkal serangan DDoS tingkat atas.
-                        </div>
+                        <div style="font-weight: 600; font-size: 13px; color: #00ADD8;">Golang (Performance)</div>
+                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5;">Cache RAM kilat, routing lalu lintas, dan penangkal serangan DDoS.</div>
                     </div>
                 </div>
 
-                <!-- PYTHON SECTION -->
                 <div style="display: flex; gap: 12px;">
-                    <div style="flex-shrink: 0; margin-top: 1px;">${iconPython}</div>
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/110px-Python-logo-notext.svg.png" alt="Python" style="width: 24px; height: 24px; object-fit: contain; margin-top: 1px;">
                     <div>
-                        <div style="font-weight: 600; font-size: 13px; color: #111827; margin-bottom: 3px;">Python</div>
-                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5;">
-                            Bertindak sebagai inti keamanan. Menangani enkripsi data sensitif, validasi payload berbahaya (SQLi/XSS), dan pengamanan storage.
-                        </div>
+                        <div style="font-weight: 600; font-size: 13px; color: #3776AB;">Python (Security)</div>
+                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5;">Enkripsi data sensitif, validasi SQLi/XSS, dan pengamanan storage.</div>
                     </div>
                 </div>
 
             </div>
 
-            <!-- FOOTER -->
-            <div style="padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; display: flex; align-items: center; gap: 6px;">
-                ${iconInfo}
-                Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
+            <div style="padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
+                * Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
             </div>
         `;
 
-        // Styling
         securityPopup.style.cssText = `
             position: fixed;
             bottom: 24px;
@@ -231,10 +199,10 @@
             border: 1px solid #e5e7eb;
             padding: 20px 24px;
             border-radius: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             z-index: 999999;
             width: 320px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             pointer-events: none; 
             opacity: 0;
             transform: translateY(10px);
@@ -258,7 +226,6 @@
 
     }, true);
 
-    // ANTI XSS
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
