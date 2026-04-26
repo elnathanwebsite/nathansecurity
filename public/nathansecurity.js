@@ -1,17 +1,26 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER (Letakkan Paling Atas)
+// 🚀 NITROUS BOOSTER + SPLIT ROUTING (Go vs Python)
 // ==========================================
 (function() {
     'use strict';
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
+    // 1. DEFINISI 2 ALAMAT SERVER
+    const PERF_API = "/api/performance"; // Golang (CEPAT)
+    const SEC_API = "/api/monitor";      // Python (AMAN)
+    
+    // Ambil base URL secara otomatis (biar cocok saat local maupun live di Vercel)
+    const BASE_URL = window.location.origin;
+
+    // 2. MEMORI TURBO (Fetch Cache)
     const apiCache = new Map();
     const originalFetch = window.fetch;
     
     window.fetch = async function(...args) {
         const url = (typeof args[0] === 'string') ? args[0] : args[0].url;
         const body = args[1]?.body;
+        
         let cacheKey = url;
         if (body) {
             try {
@@ -21,10 +30,21 @@
                 else cacheKey = url + body;
             } catch(e) { cacheKey = url + body; }
         }
+
+        // Jika ada di cache lokal, kembalikan langsung (0ms)
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
-            if (Date.now() - cached.time < 300000) { return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
+            if (Date.now() - cached.time < 300000) { 
+                return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
         }
+
+        // JIKA BUKAN API NATHAN, BIARKAN JALAN NORMAL TANPA GANGGUAN!
+        if (!url.includes('/api/performance') && !url.includes('/api/monitor')) {
+            return originalFetch.apply(this, args);
+        }
+
+        // JIKA INI API NATHAN, PROSES DAN SIMPAN KE CACHE
         const response = await originalFetch.apply(this, args);
         if (response.ok) {
             const cloneResponse = response.clone();
@@ -36,11 +56,13 @@
         return response;
     };
 
+    // 3. PRECONNECT AGRESIF
     const preconnect = document.createElement('link');
     preconnect.rel = 'preconnect';
-    preconnect.href = window.location.origin;
+    preconnect.href = BASE_URL;
     document.head.appendChild(preconnect);
 
+    // 4. DOM CRUNCHER
     window.addEventListener('load', () => {
         setTimeout(() => {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT);
@@ -61,9 +83,14 @@
     if (window.__InvisibleShieldActive) return;
     window.__InvisibleShieldActive = true;
 
+    const BASE_URL = window.location.origin;
+    const PERF_API = BASE_URL + "/api/performance"; // Go
+    const SEC_API = BASE_URL + "/api/monitor";      // Python
+
     const PREFIX = "ROMAN_CIPHER_V2::";
     const SALT = "SPQR_Maximus_2024";
     
+    // 1. ENKRIPSI STORAGE
     function xorCipher(text, key) {
         let r = '';
         for (let i = 0; i < text.length; i++) r += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
@@ -118,12 +145,53 @@
     }, 5000);
 
     // ==========================================
-    // UI POPUP (PUTIH BERSIH + SVG ICONS)
+    // 2. SPLIT HEARTBEAT (Go vs Python)
+    // ==========================================
+    let isCondemned = false;
+
+    async function startHealthCheck() {
+        if (isCondemned) return;
+
+        try {
+            // Panggil GOLANG dulu untuk cek performa & cache (Super Cepat)
+            const goCheck = await fetch(PERF_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "health_check" })
+            }).then(r => r.json()).catch(() => null);
+
+            // Jika Go menolak (misal ada serangan massive), STOP!
+            if (goCheck && goCheck.status === "blocked") {
+                isCondemned = true;
+                return showExecutionScreen("ACCESS DENIED", "Golang Firewall Triggered");
+            }
+
+            // Jika Go aman, lanjut panggil PYTHON untuk cek keamanan mendalam
+            const pyCheck = await fetch(SEC_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "heartbeat", path: window.location.pathname })
+            }).then(r => r.json()).catch(() => null);
+
+            if (pyCheck && pyCheck.status === "blocked") {
+                isCondemned = true;
+                return showExecutionScreen("NEGATVM EST", "Python Security Triggered");
+            }
+
+        } catch (e) {
+            // Biarkan silent jika gagal, jangan ganggu user
+        }
+    }
+
+    // Jalankan pengecekan
+    startHealthCheck();
+
+    // ==========================================
+    // 3. UI POPUP (PUTIH BERSIH + SVG ICONS)
     // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
 
-    // Kumpulan Ikon SVG (Ringan, Tajam, Tidak Norak)
     const icons = {
         shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
         attack: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
@@ -145,7 +213,7 @@
                 ${icons.shield}
                 <div>
                     <div style="font-weight: 600; font-size: 14px; color: #111827; line-height: 1;">Nathan Security</div>
-                    <div style="font-size: 10px; color: #9ca3af; margin-top: 2px;">Protection Active</div>
+                    <div style="font-size: 10px; color: #9ca3af; margin-top: 2px;">Hybrid Engine Active</div>
                 </div>
             </div>
             
@@ -155,6 +223,10 @@
             
             <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
                 <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
+                    ${icons.snake}
+                    <span>Golang Fast Cache (Active)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
                     ${icons.shield}
                     <span>Enkripsi Storage Aktif</span>
                 </div>
@@ -163,12 +235,8 @@
                     <span>Proteksi Serangan API</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
-                    ${icons.snake}
-                    <span>Filter Injeksi Kode</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
                     ${icons.python}
-                    <span>Intersep Anti-Sniffing</span>
+                    <span>Python Deep Security</span>
                 </div>
             </div>
 
@@ -178,37 +246,26 @@
             </div>
         `;
 
-        // Styling UI Clean White Modern
         securityPopup.style.cssText = `
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: rgba(255, 255, 255, 0.96);
-            border: 1px solid #e5e7eb;
-            border-left: 4px solid #3b82f6;
-            padding: 20px 24px;
-            border-radius: 8px;
+            position: fixed; bottom: 24px; right: 24px;
+            background: rgba(255, 255, 255, 0.96); border: 1px solid #e5e7eb; border-left: 4px solid #3b82f6;
+            padding: 20px 24px; border-radius: 8px;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            z-index: 999999;
-            max-width: 300px;
+            z-index: 999999; max-width: 300px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            pointer-events: none; 
-            opacity: 0;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            pointer-events: none; opacity: 0;
             transform: translateY(10px) scale(0.98);
             transition: opacity 0.3s ease, transform 0.3s ease;
         `;
         
         document.body.appendChild(securityPopup);
 
-        // Animasi Masuk
         requestAnimationFrame(() => {
             securityPopup.style.opacity = '1';
             securityPopup.style.transform = 'translateY(0) scale(1)';
         });
 
-        // Animasi Keluar
         setTimeout(() => {
             if (securityPopup) {
                 securityPopup.style.opacity = '0';
@@ -219,7 +276,7 @@
 
     }, true);
 
-    // ANTI XSS
+    // 4. ANTI XSS
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
@@ -229,5 +286,15 @@
         }));
     });
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+
+    // Fungsi UI Blokiran
+    function showExecutionScreen(title, reason) {
+        window.stop(); 
+        document.documentElement.innerHTML = ''; 
+        const style = document.createElement('style');
+        style.textContent = `body{margin:0;padding:0;background:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#111;}h1{font-size:24px;margin-bottom:10px;}p{color:#666;font-size:14px;}`;
+        document.head.appendChild(style);
+        document.body.innerHTML = `<div style="text-align:center"><h1>${title}</h1><p>${reason}</p></div>`;
+    }
 
 })();
