@@ -18,75 +18,51 @@
         if (body) {
             try {
                 const parsedBody = JSON.parse(body);
-                // Khusus API LLM, cache berdasarkan prompt/input terakhir saja supaya akurat
-                if (parsedBody.messages) {
-                    cacheKey = url + JSON.stringify(parsedBody.messages.slice(-1));
-                } else if (parsedBody.prompt) {
-                    cacheKey = url + parsedBody.prompt;
-                } else {
-                    cacheKey = url + body;
-                }
-            } catch(e) {
-                cacheKey = url + body;
-            }
+                if (parsedBody.messages) cacheKey = url + JSON.stringify(parsedBody.messages.slice(-1));
+                else if (parsedBody.prompt) cacheKey = url + parsedBody.prompt;
+                else cacheKey = url + body;
+            } catch(e) { cacheKey = url + body; }
         }
 
-        // Kalau sudah pernah ditanyakan dalam 5 menit terakhir, kembalikan dari memori!
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
             if (Date.now() - cached.time < 300000) { 
-                return new Response(JSON.stringify(cached.data), {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/json' }
-                });
+                return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
             }
         }
 
-        // Kalau belum ada, lakukan fetch asli
         const response = await originalFetch.apply(this, args);
-        
-        // Simpan hasilnya ke memori untuk request selanjutnya
         if (response.ok) {
             const cloneResponse = response.clone();
             cloneResponse.json().then(data => {
                 apiCache.set(cacheKey, { data: data, time: Date.now() });
-                if (apiCache.size > 50) { // Batasi max 50 cache biar RAM HP tidak bocor
-                    const oldestKey = apiCache.keys().next().value;
-                    apiCache.delete(oldestKey);
-                }
+                if (apiCache.size > 50) { const oldestKey = apiCache.keys().next().value; apiCache.delete(oldestKey); }
             }).catch(() => {});
         }
         return response;
     };
 
-    // 2. PRECONNECT AGRESIF (Mempercepat sambungan pertama ke API)
-    const apiHost = window.location.origin; // Otomatis ambil domain website kamu
+    // 2. PRECONNECT AGRESIF
     const preconnect = document.createElement('link');
     preconnect.rel = 'preconnect';
-    preconnect.href = apiHost;
+    preconnect.href = window.location.origin;
     document.head.appendChild(preconnect);
 
-    // 3. DOM CRUNCHER (Menghapus sampah HTML tersembunyi saat web selesai loading)
+    // 3. DOM CRUNCHER
     window.addEventListener('load', () => {
         setTimeout(() => {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT);
-            let node;
-            let trashCount = 0;
+            let node; let trashCount = 0;
             while (node = walker.nextNode()) {
-                // Hapus komentar HTML <!-- --> dan spasi kosong berlebih
-                if (node.nodeType === 8 || (node.nodeType === 3 && !node.textContent.trim())) {
-                    node.remove();
-                    trashCount++;
-                }
+                if (node.nodeType === 8 || (node.nodeType === 3 && !node.textContent.trim())) { node.remove(); trashCount++; }
             }
-            if(trashCount > 0) console.log(`%c🧹 DOM CRUNCHER: Membuang ${trashCount} sampah tersembunyi.`, "color: green;");
         }, 1000);
     });
 })();
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD
+// 🛡️ INVISIBLE SECURITY SHIELD + UI ELEGAN
 // ==========================================
 (function() {
     'use strict';
@@ -129,21 +105,17 @@
         } catch(e) { return data; }
     }
 
-    // Daftar kata yang dianggap sensitif
     const SENSITIVE = [/@gmail\.com/i, /@yahoo\.com/i, /user[_-]?token/i, /api[_-]?key/i, /access[_-]?token/i, /password/i, /\bemail\b/i, /\bphone\b/i];
-    
     function isSensitive(data) {
         if (typeof data !== 'string') return false;
         try { return SENSITIVE.some(p => p.test(JSON.parse(data))); } catch(e) { return SENSITIVE.some(p => p.test(data)); }
     }
 
-    // Hook LocalStorage & SessionStorage
     const origLSSet = Storage.prototype.setItem;
     const origLSGet = Storage.prototype.getItem;
     Storage.prototype.setItem = function(k, v) { origLSSet.call(this, k, isSensitive(v) ? encryptData(v) : v); };
     Storage.prototype.getItem = function(k) { const r = origLSGet.call(this, k); return (r && r.startsWith(PREFIX)) ? decryptData(r) : r; };
 
-    // Pindai data lama yang belum terenkripsi tiap 5 detik
     setInterval(() => {
         try {
             for (let i = 0; i < localStorage.length; i++) {
@@ -154,10 +126,87 @@
         } catch (e) {}
     }, 5000);
 
-    // 2. ANTI KLIK KANAN (Super Aman, 1 baris)
-    document.addEventListener('contextmenu', e => e.preventDefault(), true);
+    // 2. ANTI KLIK KANAN (UI ELEGAN & DEWASA)
+    let securityPopup = null;
+    let popupCooldown = false;
 
-    // 3. ANTI XSS INJEKSI (Menghapus script jahat yang disuntikkan)
+    document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        
+        // Cegah spam notifikasi jika user klik kanan terus-menerus
+        if (popupCooldown) return; 
+        popupCooldown = true;
+        setTimeout(() => popupCooldown = false, 4000); // Cooldown 4 detik
+
+        // Hapus popup sebelumnya jika masih ada
+        if (securityPopup) securityPopup.remove();
+
+        // Membuat elemen UI notifikasi
+        securityPopup = document.createElement('div');
+        securityPopup.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <div style="width: 6px; height: 6px; background: #d4af37; border-radius: 50%; box-shadow: 0 0 6px #d4af37;"></div>
+                <div style="font-weight: 600; font-size: 13px; color: #e0e0e0; letter-spacing: 1px; text-transform: uppercase;">Nathan Security</div>
+            </div>
+            <div style="font-size: 12px; color: #888; line-height: 1.5; margin-bottom: 12px;">
+                Akses inspeksi halaman ini dibatasi untuk melindungi integritas data dan sistem.
+            </div>
+            <div style="font-size: 11px; color: #555; line-height: 1.6; border-top: 1px solid #2a2a2a; padding-top: 10px;">
+                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Enkripsi Storage Aktif</div>
+                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Proteksi Lalu Lintas API</div>
+                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Filter Injeksi Kode</div>
+                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Intersep Anti-Sniffing</div>
+            </div>
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #2a2a2a; font-size: 10px; color: #444; font-style: italic;">
+                * Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
+            </div>
+        `;
+
+        // Styling CSS Pop-up (Darkmode, elegan, modern)
+        securityPopup.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(18, 18, 18, 0.95);
+            border: 1px solid #333;
+            border-left: 3px solid #d4af37;
+            padding: 18px 22px;
+            border-radius: 6px;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            z-index: 999999;
+            max-width: 280px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            pointer-events: none; /* PENTING: Tidak mengganggu klik kiri website */
+            opacity: 0;
+            transform: translateY(15px);
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        `;
+        
+        document.body.appendChild(securityPopup);
+
+        // Animasi Masuk (Muncul dari bawah)
+        requestAnimationFrame(() => {
+            securityPopup.style.opacity = '1';
+            securityPopup.style.transform = 'translateY(0)';
+        });
+
+        // Animasi Keluar (Hilang perlahan)
+        setTimeout(() => {
+            if (securityPopup) {
+                securityPopup.style.opacity = '0';
+                securityPopup.style.transform = 'translateY(15px)';
+                setTimeout(() => { 
+                    if(securityPopup) securityPopup.remove(); 
+                    securityPopup = null;
+                }, 400);
+            }
+        }, 3500); // Tampil selama 3,5 detik
+
+    }, true);
+
+    // 3. ANTI XSS INJEKSI
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
