@@ -101,7 +101,7 @@
     // Cegah Klik Kanan -> Tampilkan peringatan visual sesaat, JANGAN matikan fungsi klik!
     document.addEventListener('contextmenu', e => {
         e.preventDefault();
-        showWarningPopup("🚫 AREA TERLARANG LEGION!");
+        showWarningPopup("🚫 Web Ini Di Lindungi Oleh Nathan Scurity");
         reportToServer("CONTEXT_MENU_BLOCKED");
     });
 
