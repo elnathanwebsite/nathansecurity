@@ -1,13 +1,13 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER
+// 🚀 NITROUS BOOSTER (FAST CACHE)
 // ==========================================
 (function() {
     'use strict';
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
-    const PERF_API = "/api/performance"; 
-    const SEC_API = "/api/monitor";      
+    const PERF_API = "/api/performance";
+    const SEC_API = "/api/monitor";
     const BASE_URL = window.location.origin;
 
     const apiCache = new Map();
@@ -61,7 +61,7 @@
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD + UI GAMBAR BESAR
+// 🛡️ INVISIBLE SECURITY SHIELD + NEW FEATURES
 // ==========================================
 (function() {
     'use strict';
@@ -128,6 +128,47 @@
         } catch (e) {}
     }, 5000);
 
+    // ==========================================
+    // 🆕 FUNGSI TAMBAHAN (ADDED FEATURES)
+    // ==========================================
+
+    // 1. PRINT PROTECTION (Anti Cetak Dokumen)
+    const printStyle = document.createElement('style');
+    printStyle.media = 'print';
+    printStyle.textContent = `
+        body { display: none !important; }
+        :after { 
+            content: "Nathan Security - Print Disabled"; 
+            display: block; 
+            padding: 50px; 
+            text-align: center; 
+            font-family: sans-serif; 
+            font-size: 24px; 
+            color: #111; 
+        }
+    `;
+    document.head.appendChild(printStyle);
+
+    // 2. DRAG PROTECTION (Anti Seret Gambar/Elemen)
+    document.addEventListener('dragstart', function(e) {
+        if (e.target.tagName === 'IMG' || e.target.closest('[data-nathan-protected]')) {
+            e.preventDefault();
+            return false;
+        }
+    }, true);
+
+    // 3. COPY WATERMARK (Tanda Air Salin)
+    document.addEventListener('copy', function(e) {
+        const selection = window.getSelection().toString();
+        if (selection.length > 0) {
+            e.clipboardData.setData('text/plain', selection + '\n\n---\nDilindungi oleh Nathan Security');
+            e.preventDefault();
+        }
+    }, true);
+
+    // ==========================================
+    // SPLIT HEARTBEAT (GO + PYTHON)
+    // ==========================================
     let isCondemned = false;
     async function startHealthCheck() {
         if (isCondemned) return;
@@ -141,7 +182,7 @@
     startHealthCheck();
 
     // ==========================================
-    // UI POP UP TERBARU
+    // UI POP UP (PREMIUM & RAPI)
     // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
@@ -156,57 +197,51 @@
 
         securityPopup = document.createElement('div');
         securityPopup.innerHTML = `
-           <div style="text-align: center; margin-bottom: 16px; border-bottom: 1px solid #f3f4f6; padding-bottom: 16px;">
-    <!-- GAMBAR UTAMA DARI LINK KAMU -->
-    <img src="https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png" alt="Nathan Security" style="height: 64px; width: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-    <div style="margin-top: 10px; font-weight: 700; font-size: 15px; color: #111827; letter-spacing: -0.3px;">Nathan Security</div>
-    <div style="font-size: 11px; color: #00ADD8; font-weight: 600; margin-top: 2px;">Hybrid Engine Active</div>
-</div>
-
-<div style="font-size: 12px; color: #6b7280; text-align: center; line-height: 1.5; margin-bottom: 18px;">
-    Akses inspeksi halaman dibatasi untuk melindungi integritas data.
-</div>
-
-<!-- LIST FUNGSI DENGAN ICON SVG (ANTI ERROR) -->
-<div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 18px;">
-    
-    <!-- GOLANG SECTION -->
-    <div style="display: flex; gap: 12px; align-items: flex-start;">
-        <div style="flex-shrink: 0; margin-top: 2px;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="24" height="24" rx="5" fill="#00ADD8"/>
-                <path d="M12 4C9.5 4 9.5 5.5 9.5 5.5V8H12.5V9H8C8 9 6 9.2 6 12C6 14.8 8 15 8 15H9.5V12C9.5 12 9.5 10 12.5 10H15C15 10 16 10 16 8V5.5C16 5.5 16 4 12 4Z" fill="white"/>
-                <circle cx="10.5" cy="6" r="1" fill="#00ADD8"/>
-            </svg>
-        </div>
-        <div>
-            <div style="font-weight: 700; font-size: 13px; color: #111827;">Golang</div>
-            <div style="font-size: 11px; color: #6b7280; line-height: 1.5; margin-top: 2px;">
-                <span style="color: #00ADD8; font-weight: 600;">Performa:</span> Cache RAM super kilat, routing lalu lintas data, dan penangkal serangan DDoS paralel.
+            <div style="text-align: center; margin-bottom: 16px; border-bottom: 1px solid #f3f4f6; padding-bottom: 16px;">
+                <img src="https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png" alt="Logo" style="height: 64px; width: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+                <div style="margin-top: 10px; font-weight: 700; font-size: 15px; color: #111827; letter-spacing: -0.3px;">Nathan Security</div>
+                <div style="font-size: 11px; color: #00ADD8; font-weight: 600; margin-top: 2px;">Hybrid Engine Active</div>
             </div>
-        </div>
-    </div>
-
-    <!-- PYTHON SECTION -->
-    <div style="display: flex; gap: 12px; align-items: flex-start;">
-        <div style="flex-shrink: 0; margin-top: 2px;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C9.24 2 9 3.11 9 4.5V7H12.5V8H7.5C6.11 8 5 9.24 5 11v2.5c0 1.38 1.12 2.5 2.5 2.5H9v2.5c0 1.38 1.24 2.5 3 2.5s3-1.12 3-2.5V16h-3.5v-1H17c1.38 0 2.5-1.12 2.5-2.5V11c0-1.38-1.12-2.5-2.5-2.5H15V4.5C15 3.11 14.76 2 12 2zM9.5 17.5a.75.75 0 110 1.5.75.75 0 010-1.5zm5-11a.75.75 0 110 1.5.75.75 0 010-1.5z" fill="#3776AB"/>
-            </svg>
-        </div>
-        <div>
-            <div style="font-weight: 700; font-size: 13px; color: #111827;">Python</div>
-            <div style="font-size: 11px; color: #6b7280; line-height: 1.5; margin-top: 2px;">
-                <span style="color: #3776AB; font-weight: 600;">Keamanan:</span> Enkripsi data sensitif, validasi payload SQLi/XSS, dan pengamanan storage.
+            
+            <div style="font-size: 12px; color: #6b7280; text-align: center; line-height: 1.5; margin-bottom: 18px;">
+                Akses inspeksi halaman dibatasi untuk melindungi integritas data.
             </div>
-        </div>
-    </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 18px;">
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="flex-shrink: 0; margin-top: 2px;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="5" fill="#00ADD8"/>
+                            <path d="M12 4C9.5 4 9.5 5.5 9.5 5.5V8H12.5V9H8C8 9 6 9.2 6 12C6 14.8 8 15 8 15H9.5V12C9.5 12 9.5 10 12.5 10H15C15 10 16 10 16 8V5.5C16 5.5 16 4 12 4Z" fill="white"/>
+                            <circle cx="10.5" cy="6" r="1" fill="#00ADD8"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 13px; color: #111827;">Golang</div>
+                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5; margin-top: 2px;">
+                            <span style="color: #00ADD8; font-weight: 600;">Performa:</span> Cache RAM kilat, routing lalu lintas, dan penangkal serangan DDoS.
+                        </div>
+                    </div>
+                </div>
 
-</div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="flex-shrink: 0; margin-top: 2px;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C9.24 2 9 3.11 9 4.5V7H12.5V8H7.5C6.11 8 5 9.24 5 11v2.5c0 1.38 1.12 2.5 2.5 2.5H9v2.5c0 1.38 1.24 2.5 3 2.5s3-1.12 3-2.5V16h-3.5v-1H17c1.38 0 2.5-1.12 2.5-2.5V11c0-1.38-1.12-2.5-2.5-2.5H15V4.5C15 3.11 14.76 2 12 2zM9.5 17.5a.75.75 0 110 1.5.75.75 0 010-1.5zm5-11a.75.75 0 110 1.5.75.75 0 010-1.5z" fill="#3776AB"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 13px; color: #111827;">Python</div>
+                        <div style="font-size: 11px; color: #6b7280; line-height: 1.5; margin-top: 2px;">
+                            <span style="color: #3776AB; font-weight: 600;">Keamanan:</span> Enkripsi data sensitif, validasi SQLi/XSS, dan pengamanan storage.
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-<div style="padding-top: 12px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
-    * Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
-</div>
+            <div style="padding-top: 12px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
+                * Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
+            </div>
         `;
 
         securityPopup.style.cssText = `
@@ -244,6 +279,7 @@
 
     }, true);
 
+    // ANTI XSS
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
