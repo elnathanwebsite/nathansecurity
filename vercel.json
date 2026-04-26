@@ -1,6 +1,26 @@
 {
   "rewrites": [
     { "source": "/nathansecurity.js", "destination": "/public/nathansecurity.js" },
-    { "source": "/api/monitor", "destination": "/api/monitor.py" }
+    { "source": "/api/monitor", "destination": "/api/monitor.py" },
+    { "source": "/api/performance", "destination": "/api/performance.go" }
+  ],
+  "headers": [
+    {
+      "source": "/nathansecurity(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        },
+        {
+          "key": "Expires",
+          "value": "0"
+        }
+      ]
+    }
   ]
 }
