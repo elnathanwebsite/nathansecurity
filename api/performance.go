@@ -1,7 +1,5 @@
 package main
 
-package main
-
 import (
     "bytes"
     "context"
@@ -25,9 +23,6 @@ var (
     cacheTTL    = 5 * time.Minute
 )
 
-// ═══════════════════════════════════════════
-// RATE LIMITER - Ring Buffer O(1)
-// ═══════════════════════════════════════════
 type ipState struct {
     banned    int32
     banExpiry int64
@@ -56,10 +51,8 @@ func (s *ipState) ban(now int64) {
 func (s *ipState) allow(now int64) bool {
     s.mu.Lock()
     defer s.mu.Unlock()
-
     window := now - int64(10*time.Second)
     valid := int32(0)
-
     for i := int32(0); i < s.size; i++ {
         idx := (s.head - s.size + i + 32) % 32
         if s.ts[idx] > window {
@@ -67,12 +60,10 @@ func (s *ipState) allow(now int64) bool {
             valid++
         }
     }
-
     s.size = valid
     if valid >= int32(ipLimit) {
         return false
     }
-
     s.head = (s.head + 1) % 32
     s.ts[s.head] = now
     s.size++
@@ -86,9 +77,6 @@ func getIPState(ip string) *ipState {
     return val.(*ipState)
 }
 
-// ═══════════════════════════════════════════
-// CACHE WITH TTL
-// ═══════════════════════════════════════════
 type cacheEntry struct {
     data      string
     expiresAt int64
@@ -131,16 +119,10 @@ func startCacheCleaner() {
     }()
 }
 
-// ═══════════════════════════════════════════
-// BUFFER POOL
-// ═══════════════════════════════════════════
 var bufPool = sync.Pool{
     New: func() interface{} { return new(bytes.Buffer) },
 }
 
-// ═══════════════════════════════════════════
-// SINGLE HTTP CLIENT (Connection Reuse)
-// ═══════════════════════════════════════════
 var httpClient = &http.Client{
     Timeout: 2 * time.Second,
     Transport: &http.Transport{
@@ -151,9 +133,6 @@ var httpClient = &http.Client{
     },
 }
 
-// ═══════════════════════════════════════════
-// PRE-BUILT RESPONSES
-// ═══════════════════════════════════════════
 var (
     respAllowed    = []byte(`{"status":"allowed"}`)
     respBlocked    = []byte(`{"status":"blocked"}`)
@@ -161,9 +140,6 @@ var (
     respPythonDown = []byte(`{"status":"PYTHON_VAULT_DOWN"}`)
 )
 
-// ═══════════════════════════════════════════
-// MALICIOUS PATTERNS (Split for early exit)
-// ═══════════════════════════════════════════
 var maliciousPatterns = []*regexp.Regexp{
     regexp.MustCompile(`(?i)union\s+select`),
     regexp.MustCompile(`(?i)insert\s+into\s`),
@@ -192,43 +168,28 @@ func isMalicious(s string) bool {
     return false
 }
 
-// ═══════════════════════════════════════════
-// PROXY TO PYTHON
-// ═══════════════════════════════════════════
 func proxyToPython(body map[string]interface{}) (map[string]interface{}, error) {
     buf := bufPool.Get().(*bytes.Buffer)
     buf.Reset()
     json.NewEncoder(buf).Encode(body)
-
-    req, err := http.NewRequestWithContext(
-        context.Background(),
-        "POST",
-        pythonVaultURL,
-        buf,
-    )
+    req, err := http.NewRequestWithContext(context.Background(), "POST", pythonVaultURL, buf)
     if err != nil {
         bufPool.Put(buf)
         return nil, err
     }
     req.Header.Set("Content-Type", "application/json")
-
     resp, err := httpClient.Do(req)
     bufPool.Put(buf)
     if err != nil {
         return nil, err
     }
     defer resp.Body.Close()
-
     var result map[string]interface{}
     json.NewDecoder(resp.Body).Decode(&result)
     return result, nil
 }
 
-// ═══════════════════════════════════════════
-// MAIN HANDLER
-// ═══════════════════════════════════════════
 func securityHandler(w http.ResponseWriter, r *http.Request) {
-    // CORS Preflight
     if r.Method == "OPTIONS" {
         w.Header().Set("Access-Control-Allow-Origin", "*")
         w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -236,8 +197,6 @@ func securityHandler(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
         return
     }
-
-    // Extract IP
     ip := r.Header.Get("X-Forwarded-For")
     if ip == "" {
         ip = r.RemoteAddr
@@ -247,61 +206,43 @@ func securityHandler(w http.ResponseWriter, r *http.Request) {
     } else if idx := strings.IndexByte(ip, ','); idx != -1 {
         ip = strings.TrimSpace(ip[:idx])
     }
-
-    // IP State check
     state := getIPState(ip)
     now := time.Now().UnixNano()
-
     if state.isBanned(now) {
         w.Header().Set("Content-Type", "application/json")
         w.Write(respBlocked)
         return
     }
-
-    // Read body (limit 64KB)
     bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 65536))
-
     var req map[string]interface{}
     if len(bodyBytes) > 2 {
         json.Unmarshal(bodyBytes, &req)
     }
-
     action, _ := req["action"].(string)
     payload, _ := req["data"].(string)
-
-    // Malicious check
     if len(payload) > 3 && isMalicious(payload) {
         state.ban(now)
         w.Header().Set("Content-Type", "application/json")
         w.Write(respMalicious)
         return
     }
-
-    // Rate limit
     if !state.allow(now) {
         state.ban(now)
         w.Header().Set("Content-Type", "application/json")
         w.Write(respBlocked)
         return
     }
-
-    // Set headers
     w.Header().Set("Content-Type", "application/json")
     w.Header().Set("Access-Control-Allow-Origin", "*")
-
-    // Fast path: not our actions
     if action != "hide_data" && action != "encrypt" && action != "decrypt" {
         w.Write(respAllowed)
         return
     }
-
-    // Hide data with cache
     if action == "hide_data" {
         if cached, ok := cacheGet(payload); ok {
             w.Write([]byte(`{"status":"success","result":"` + cached + `","boosted":true}`))
             return
         }
-
         result, err := proxyToPython(req)
         if err == nil && result["status"] == "success" {
             if resStr, ok := result["result"].(string); ok {
@@ -314,15 +255,12 @@ func securityHandler(w http.ResponseWriter, r *http.Request) {
         w.Write(respPythonDown)
         return
     }
-
-    // Encrypt/Decrypt
     result, err := proxyToPython(req)
     if err != nil {
         w.WriteHeader(http.StatusInternalServerError)
         w.Write(respPythonDown)
         return
     }
-
     buf := bufPool.Get().(*bytes.Buffer)
     buf.Reset()
     json.NewEncoder(buf).Encode(result)
@@ -330,33 +268,28 @@ func securityHandler(w http.ResponseWriter, r *http.Request) {
     bufPool.Put(buf)
 }
 
-// ═══════════════════════════════════════════
-// MAIN
-// ═══════════════════════════════════════════
 func init() {
     startCacheCleaner()
 }
 
+func getPort() string {
+    p := os.Getenv("PORT")
+    if p == "" {
+        p = "8080"
+    }
+    return p
+}
+
 func main() {
     server := &http.Server{
-        Addr:              ":" + port(),
+        Addr:              ":" + getPort(),
         ReadHeaderTimeout: 3 * time.Second,
         ReadTimeout:       8 * time.Second,
         WriteTimeout:      8 * time.Second,
         IdleTimeout:       120 * time.Second,
         MaxHeaderBytes:    4096,
     }
-
     http.HandleFunc("/api/monitor", securityHandler)
-
-    log.Println("⚡ Nathan Ultra-Fast Engine v2 Started")
+    log.Println("Ultra-Fast Engine Started on :" + getPort())
     server.ListenAndServe()
-}
-
-func port() string {
-    p := os.Getenv("PORT")
-    if p == "" {
-        p = "8080"
-    }
-    return p
 }
