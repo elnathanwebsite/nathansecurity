@@ -81,9 +81,14 @@
         return r;
     }
 
+    // [FIXED] Menghapus new Date().getUTCDate() agar kunci persisten dan tidak reset tiap tengah malam
     function getKey() {
-        let h = 0; const s = (navigator.userAgent||'') + SALT + new Date().getUTCDate();
-        for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h = h & h; }
+        let h = 0; 
+        const s = (navigator.userAgent || '') + SALT;
+        for (let i = 0; i < s.length; i++) { 
+            h = ((h << 5) - h) + s.charCodeAt(i); 
+            h = h & h; 
+        }
         return Math.abs(h).toString(16).padStart(8, '0');
     }
 
