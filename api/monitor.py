@@ -4,35 +4,23 @@ import os
 import re
 import base64
 import hashlib
-from upstash_redis import Redis
+import time
 from cryptography.fernet import Fernet
 
 # ============================================
-# ⚙️ SETUP KONEKSI (LAZY LOADING - AMAN UNTUK SERVERLESS)
+# ⚙️ SETUP IN-MEMORY (TANPA DATABASE)
 # ============================================
-_redis_client = None
-_cipher_suite = None
+# Data hanya tersimpan selama server Vercel masih hidup (biasanya beberapa menit)
+banned_ips = {}    # Format: {"ip_address": expiry_timestamp}
+rate_limits = {}  # Format: {"ip_address": [timestamp1, timestamp2]}
+data_cache = {}   # Format: {"key": {"data": "...", "expires": timestamp}}
 
-def get_redis():
-    global _redis_client
-    if _redis_client is None:
-        url = os.environ.get("UPSTASH_REDIS_REST_URL")
-        token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-        # Hanya nyambung jika Environment Variable-nya ada
-        if url and token:
-            _redis_client = Redis(url=url, token=token)
-    return _redis_client
+encrypt_key = os.environ.get("ENCRYPTION_KEY")
+if not encrypt_key:
+    encrypt_key = Fernet.generate_key()
+cipher_suite = Fernet(encrypt_key)
 
-def get_cipher():
-    global _cipher_suite
-    if _cipher_suite is None:
-        encrypt_key = os.environ.get("ENCRYPTION_KEY")
-        if not encrypt_key:
-            encrypt_key = Fernet.generate_key()
-        _cipher_suite = Fernet(encrypt_key)
-    return _cipher_suite
-
-# Pola racun yang 100% pasti jahat
+# Pola racun
 MALICIOUS_PATTERNS = [
     (r'(?i)(union\s+select|insert\s+into\s|drop\s+table)', 'SQL_INJECTION'),
     (r'(?i)(<script.*?>|javascript:\s*|onerror\s*=)', 'XSS_ATTACK'),
@@ -51,21 +39,20 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            # Ambil instance Redis yang aman
-            redis = get_redis()
-            if not redis:
-                return self.send_error_res(500, "REDIS_CONFIG_MISSING")
-
             client_ip = self.headers.get('x-forwarded-for', 'unknown').split(',')[0].strip()
+            now = time.time()
             
-            # 1. CEK BANNED IP
-            if redis.exists(f"ban:{client_ip}"):
-                return self.respond_banned(client_ip, redis)
+            # 1. CEK BANNED IP (In-Memory)
+            if client_ip in banned_ips:
+                if now < banned_ips[client_ip]:
+                    return self.respond_banned(client_ip, int(banned_ips[client_ip] - now))
+                else:
+                    del banned_ips[client_ip] # Waktu ban habis, hapus dari memori
 
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length > 50000: 
-                redis.setex(f"ban:{client_ip}", 3600, "OVERSIZED_PAYLOAD")
-                return self.respond_banned(client_ip, redis)
+                banned_ips[client_ip] = now + 3600
+                return self.respond_banned(client_ip, 3600)
 
             body = json.loads(self.rfile.read(content_length)) if content_length > 0 else {}
             action = body.get('action', '')
@@ -73,69 +60,60 @@ class handler(BaseHTTPRequestHandler):
 
             # 2. ANTI RACUN (SQLi / XSS)
             if payload and self.contains_malicious_payload(payload):
-                redis.setex(f"ban:{client_ip}", 86400, "MALICIOUS_PAYLOAD")
-                return self.respond_banned(client_ip, redis)
+                banned_ips[client_ip] = now + 86400
+                return self.respond_banned(client_ip, 86400)
 
             # ==========================================
-            # A. FITUR KEAMANAN (DIPROTEKSI RATE LIMIT + TURBO CACHE)
+            # A. FITUR KEAMANAN
             # ==========================================
             if action == 'hide_data':
-                if not self.check_limit(redis, f"sec:{client_ip}", 10, 60):
-                    redis.setex(f"ban:{client_ip}", 1800, "SECURITY_SPAM")
-                    return self.respond_banned(client_ip, redis)
+                if not self.check_limit(client_ip, 10, 60):
+                    banned_ips[client_ip] = now + 1800
+                    return self.respond_banned(client_ip, 1800)
                     
                 cache_key = f"cache:hide:{hashlib.md5(str(payload).encode()).hexdigest()}"
-                cached_result = redis.get(cache_key)
+                cached_result = self.get_cache(cache_key)
                 
                 if cached_result:
-                    result = cached_result
-                    is_boosted = True
+                    return self.send_json({"status": "success", "result": cached_result, "boosted": True})
                 else:
                     encoded = base64.b64encode(str(payload).encode()).decode()
                     result = "ROMAN_CIPHER_V2::" + encoded[::-1]
-                    redis.setex(cache_key, 3600, result) 
-                    is_boosted = False
-                    
-                return self.send_json({"status": "success", "result": result, "boosted": is_boosted})
+                    self.set_cache(cache_key, result, 3600)
+                    return self.send_json({"status": "success", "result": result, "boosted": False})
 
             if action in ['encrypt', 'decrypt']:
-                cipher = get_cipher() # Ambil instance Cipher yang aman
-                
-                if not self.check_limit(redis, f"sec:{client_ip}", 20, 60):
-                    redis.setex(f"ban:{client_ip}", 3600, "CRYPTO_ABUSE")
-                    return self.respond_banned(client_ip, redis)
+                if not self.check_limit(client_ip, 20, 60):
+                    banned_ips[client_ip] = now + 3600
+                    return self.respond_banned(client_ip, 3600)
                 
                 cache_key = f"cache:crypto:{hashlib.md5((action+str(payload)).encode()).hexdigest()}"
-                cached_result = redis.get(cache_key)
+                cached_result = self.get_cache(cache_key)
                 
                 if cached_result:
-                    result = cached_result
-                    is_boosted = True
+                    return self.send_json({"status": "success", "result": cached_result, "boosted": True})
                 else:
                     if action == 'encrypt':
                         p = json.dumps(payload) if isinstance(payload, (dict, list)) else str(payload)
-                        result = cipher.encrypt(cipher.encrypt(p.encode())).decode()
+                        result = cipher_suite.encrypt(cipher_suite.encrypt(p.encode())).decode()
                     else:
-                        result = cipher.decrypt(cipher.decrypt(payload.encode())).decode()
-                    redis.setex(cache_key, 1800, result) 
-                    is_boosted = False
-                    
-                return self.send_json({"status": "success", "result": result, "boosted": is_boosted})
+                        result = cipher_suite.decrypt(cipher_suite.decrypt(payload.encode())).decode()
+                    self.set_cache(cache_key, result, 1800)
+                    return self.send_json({"status": "success", "result": result, "boosted": False})
 
             # ==========================================
-            # B. REQUEST API / LLM NORMAL (LOLOS TANPA GANDELAN)
+            # B. REQUEST API / LLM NORMAL
             # ==========================================
             return self.send_json({"status": "allowed"})
 
         except json.JSONDecodeError:
             return self.send_error_res(400, "BAD_REQUEST")
         except Exception as e:
-            # DEBUG: Lihat error aslinya di Vercel Logs
-            print(f"ERROR_DI_HANDLER: {str(e)}")
+            print(f"ERROR: {str(e)}")
             return self.send_error_res(500, "SERVER_ERROR")
 
     # ==========================================
-    # UTILITAS (DITAMBAHKAN PARAMETER REDIS)
+    # UTILITAS IN-MEMORY
     # ==========================================
     def contains_malicious_payload(self, payload):
         payload_str = str(payload)
@@ -143,14 +121,33 @@ class handler(BaseHTTPRequestHandler):
             if re.search(pattern, payload_str): return True
         return False
 
-    def check_limit(self, redis, key, limit, window):
-        count = redis.incr(key)
-        if count == 1: redis.expire(key, window)
-        return count <= limit
+    def check_limit(self, ip, limit, window):
+        now = time.time()
+        if ip not in rate_limits:
+            rate_limits[ip] = []
+        
+        # Hanya simpan request dalam window waktu (misal 60 detik terakhir)
+        rate_limits[ip] = [t for t in rate_limits[ip] if now - t < window]
+        rate_limits[ip].append(now)
+        
+        return len(rate_limits[ip]) <= limit
 
-    def respond_banned(self, ip, redis):
-        ttl = redis.ttl(f"ban:{ip}")
-        self.send_json({"status": "blocked", "ip": ip, "retry_after": ttl})
+    def set_cache(self, key, data, ttl):
+        data_cache[key] = {
+            "data": data,
+            "expires": time.time() + ttl
+        }
+
+    def get_cache(self, key):
+        if key in data_cache:
+            if time.time() < data_cache[key]["expires"]:
+                return data_cache[key]["data"]
+            else:
+                del data_cache[key] # Cache expired, hapus
+        return None
+
+    def respond_banned(self, ip, retry_after):
+        self.send_json({"status": "blocked", "ip": ip, "retry_after": retry_after})
 
     def send_json(self, data):
         self.send_response(200)
