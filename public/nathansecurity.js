@@ -1,43 +1,32 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER v3 (CDN SAFE)
+// 🚀 NITROUS BOOSTER v3 (GHOST CDN MODE)
 // ==========================================
 (function() {
     'use strict';
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
-    // FIX: Gunakan URL absolut CDN, bukan origin web langganan
     const CDN_BASE = "https://nathansecurity.vercel.app";
-    const PERF_API = CDN_BASE + "/api/performance";
-    const SEC_API = CDN_BASE + "/api/monitor";
-    
     const apiCache = new Map();
     const originalFetch = window.fetch;
 
     window.fetch = async function(...args) {
-        const url = (typeof args[0] === 'string') ? args[0] : args[0].url;
-        const body = args[1]?.body;
+        const url = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
         
-        let cacheKey = url;
-        if (body) {
-            try {
-                const parsedBody = JSON.parse(body);
-                if (parsedBody.messages) cacheKey = url + JSON.stringify(parsedBody.messages.slice(-1));
-                else if (parsedBody.prompt) cacheKey = url + parsedBody.prompt;
-                else cacheKey = url + body;
-            } catch(e) { cacheKey = url + body; }
+        // 🔒 GHOST MODE: Jika ini API web langganan (Database, AI, dll), LANGSUNG LEWAT. TIDAK DIOPAK APAPUN.
+        if (!url.includes(CDN_BASE)) {
+            return originalFetch.apply(this, args);
         }
+
+        // Di bawah ini HANYA berlaku untuk request ke NathanSecurity saja (untuk hemat bandwith)
+        const body = args[1]?.body;
+        let cacheKey = url + (body || "");
         
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
-            if (Date.now() - cached.time < 300000) { // Cache 5 menit untuk performa
+            if (Date.now() - cached.time < 300000) {
                 return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' } });
             }
-        }
-        
-        // FIX: Hanya intercept request yang ditujukan untuk API NathanSecurity, biarkan API web langganan lolos begitu saja
-        if (!url.includes(CDN_BASE + "/api/")) {
-            return originalFetch.apply(this, args);
         }
         
         const response = await originalFetch.apply(this, args);
@@ -45,13 +34,12 @@
             const cloneResponse = response.clone();
             cloneResponse.json().then(data => {
                 apiCache.set(cacheKey, { data: data, time: Date.now() });
-                if (apiCache.size > 100) { const oldestKey = apiCache.keys().next().value; apiCache.delete(oldestKey); }
+                if (apiCache.size > 50) { const oldestKey = apiCache.keys().next().value; apiCache.delete(oldestKey); }
             }).catch(() => {});
         }
         return response;
     };
 
-    // Preconnect ke CDN
     const l = document.createElement('link');
     l.rel = 'preconnect';
     l.href = CDN_BASE;
@@ -59,16 +47,18 @@
 
     window.addEventListener('load', () => {
         setTimeout(() => {
-            const w = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT);
-            let n, c = 0;
-            while (n = w.nextNode()) { if (n.nodeType === 8 || (n.nodeType === 3 && !n.textContent.trim())) { n.remove(); c++; } }
-        }, 1000);
+            try {
+                const w = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
+                let n;
+                while (n = w.nextNode()) { n.remove(); }
+            } catch(e) {}
+        }, 2000);
     });
 })();
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD v3 (CDN SAFE)
+// 🛡️ INVISIBLE SECURITY SHIELD v3 (GHOST CDN MODE)
 // ==========================================
 (function() {
     'use strict';
@@ -82,7 +72,7 @@
     const PREFIX = "ROMAN_CIPHER_V3::";
     const SALT = "SPQR_Maximus_2024_Imperium";
     const LOGO_URL = "https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png";
-    const NS_MARKER = "NS_SAFE::"; // Marker eksklusif agar tidak merusak data web langganan
+    const NS_MARKER = "NS_SAFE::";
 
     function xorCipher(text, key) {
         let r = '';
@@ -118,9 +108,7 @@
         } catch(e) { return data; }
     }
 
-    // FIX: Override LocalStorage secara AMAN. 
-    // Hanya akan mengenkripsi jika developer web sengaja menandai dengan "NS_SAFE::"
-    // Token login, session, dan API key web langganan akan 100% aman dan tidak diutak-atik.
+    // 🔒 GHOST MODE: LocalStorage aman 100%. Tidak akan menyentuh Token/Database web langganan.
     const origLSSet = Storage.prototype.setItem;
     const origLSGet = Storage.prototype.getItem;
     
@@ -128,7 +116,7 @@
         if (typeof v === 'string' && v.startsWith(NS_MARKER)) {
             origLSSet.call(this, k, encryptData(v)); 
         } else {
-            origLSSet.call(this, k, v);
+            origLSSet.call(this, k, v); // Biarkan web utama menyimpan data normal
         }
     };
     
@@ -150,18 +138,15 @@
 
     // Drag Protection
     document.addEventListener('dragstart', function(e) {
-        if (['IMG','VIDEO','CANVAS'].includes(e.target.tagName) || e.target.closest('[data-nathan-protected]')) {
+        if (e.target.closest('[data-nathan-protected]')) {
             e.preventDefault(); return false;
         }
     }, true);
-    document.addEventListener('dragover', function(e) { e.preventDefault(); }, true);
-    document.addEventListener('drop', function(e) { e.preventDefault(); }, true);
 
     // Copy Watermark
     document.addEventListener('copy', function(e) {
         const sel = window.getSelection().toString();
         if (sel.length > 0) {
-            // Cek sensitif ringan hanya saat copy, tidak mengganggu localStorage
             if (/@gmail\.com|@yahoo\.com|password|credit.?card/i.test(sel)) { 
                 e.preventDefault(); showMiniToast('🔒 Data sensitif tidak dapat disalin'); return; 
             }
@@ -178,25 +163,26 @@
         };
     }
 
-    // Anti XSS
+    // 🔒 GHOST MODE: Anti-XSS tidak akan menghapus script yang dimuat oleh Web Utama (Cegah Web Crash)
     const xssPatterns = [/document\.cookie/i, /document\.write/i, /\beval\s*\(/i, /Function\s*\(/i, /setTimeout\s*\(\s*['"`]/i, /setInterval\s*\(\s*['"`]/i, /atob\s*\(/i, /String\.fromCharCode/i, /\.innerHTML\s*=/i, /\.outerHTML\s*=/i, /window\.location\s*=/i];
     new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT') {
-                if (!node.src && node.textContent && xssPatterns.some(p => p.test(node.textContent))) { node.remove(); return; }
+                // Jika script punya URL (src) yang jelas, biarkan (Dipastikan bukan XSS injeksi inline)
+                if (node.src && node.src.startsWith('http')) return; 
+                
+                // Hanya blokir jika itu Script Inline yang mencurigakan
+                if (!node.src && node.textContent && xssPatterns.some(p => p.test(node.textContent))) { 
+                    node.remove(); return; 
+                }
                 if (node.src && /javascript:|data:text\/html|blob:/i.test(node.src)) { node.remove(); return; }
             }
             if (node.nodeName === 'IFRAME' && node.src && /javascript:|data:text\/html/i.test(node.src)) node.remove();
-            if (node.nodeName === 'OBJECT' || node.nodeName === 'EMBED') node.remove();
         }));
     }).observe(document.documentElement || document.body, { childList: true, subtree: true });
 
-    // Anti Iframe
-    if (window.self !== window.top) {
-        try { window.top.location = window.self.location; } catch(e) {
-            document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#fff;font-family:sans-serif;text-align:center;color:#111"><div><h1>⛔ Akses Ditolak</h1><p style="color:#666">Halaman ini tidak dapat dimuat dalam iframe.</p></div></div>';
-        }
-    }
+    // 🔒 GHOST MODE: Anti-Iframe DINONAKTIFKAN untuk versi CDN.
+    // Kami tidak berhak menghancurkan layout Web Langganan jika mereka memakai Iframe.
 
     // Keyboard Protection
     document.addEventListener('keydown', function(e) {
@@ -206,7 +192,7 @@
         if (e.ctrlKey && (k === 'u' || k === 's')) { e.preventDefault(); return false; }
     }, true);
 
-    // Heartbeat (FIX: Sekarang mengarah ke API NathanSecurity, bukan API Web Langganan)
+    // Heartbeat
     let isCondemned = false;
     async function startHealthCheck() {
         if (isCondemned) return;
@@ -355,6 +341,6 @@
         document.body.innerHTML = `<div class="c"><div class="ic">⛔</div><h1>${title}</h1><p>${reason}<br><br>Akses Anda telah diblokir permanen.</p><div class="f">Nathan Security</div></div>`;
     }
 
-    console.log('%c🛡️ Nathan Security Shield v3 Active', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
+    console.log('%c🛡️ Nathan Security Shield v3 (Ghost CDN) Active', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
 
 })();
