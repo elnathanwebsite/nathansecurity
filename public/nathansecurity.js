@@ -45,13 +45,18 @@
         };
     }
 
-    // FASE 1: Preconnect (Aman, berjalan duluan)
+     // FASE 1: Preconnect & Aktifkan Golang Service Worker
     [CDN_BASE].forEach(d => {
         const l = document.createElement('link');
         l.rel = 'preconnect';
         l.href = d;
         document.head.appendChild(l);
     });
+
+    // AKTIFKAN TUKANG POS (SERVICE WORKER) UNTUK GOLANG
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
 
     // FASE 2: TreeWalker dihapus total karena mematikan layout Flexbox/Grid web host.
     // Fungsi penghapusan komentar dipindahkan ke dalam timeout aman.
