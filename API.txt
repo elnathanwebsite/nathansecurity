@@ -1,1 +1,1 @@
- <script src="https://nathansecurity.vercel.app/nathansecurity.js"></script>
+<script src="https://nathansecurity.vercel.app/nathansecurity.js?v=2.0"></script>
