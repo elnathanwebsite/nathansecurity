@@ -6,14 +6,12 @@
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
-    // 1. MEMORI TURBO (Fetch Cache untuk LLM/API)
     const apiCache = new Map();
     const originalFetch = window.fetch;
     
     window.fetch = async function(...args) {
         const url = (typeof args[0] === 'string') ? args[0] : args[0].url;
         const body = args[1]?.body;
-        
         let cacheKey = url;
         if (body) {
             try {
@@ -23,14 +21,10 @@
                 else cacheKey = url + body;
             } catch(e) { cacheKey = url + body; }
         }
-
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
-            if (Date.now() - cached.time < 300000) { 
-                return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-            }
+            if (Date.now() - cached.time < 300000) { return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
         }
-
         const response = await originalFetch.apply(this, args);
         if (response.ok) {
             const cloneResponse = response.clone();
@@ -42,13 +36,11 @@
         return response;
     };
 
-    // 2. PRECONNECT AGRESIF
     const preconnect = document.createElement('link');
     preconnect.rel = 'preconnect';
     preconnect.href = window.location.origin;
     document.head.appendChild(preconnect);
 
-    // 3. DOM CRUNCHER
     window.addEventListener('load', () => {
         setTimeout(() => {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT);
@@ -62,7 +54,7 @@
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD + UI ELEGAN
+// 🛡️ INVISIBLE SECURITY SHIELD + UI CLEAN WHITE
 // ==========================================
 (function() {
     'use strict';
@@ -72,7 +64,6 @@
     const PREFIX = "ROMAN_CIPHER_V2::";
     const SALT = "SPQR_Maximus_2024";
     
-    // 1. ENKRIPSI STORAGE (XOR Dinamis)
     function xorCipher(text, key) {
         let r = '';
         for (let i = 0; i < text.length; i++) r += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
@@ -126,87 +117,109 @@
         } catch (e) {}
     }, 5000);
 
-    // 2. ANTI KLIK KANAN (UI ELEGAN & DEWASA)
+    // ==========================================
+    // UI POPUP (PUTIH BERSIH + SVG ICONS)
+    // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
 
+    // Kumpulan Ikon SVG (Ringan, Tajam, Tidak Norak)
+    const icons = {
+        shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+        attack: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
+        python: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3776AB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M8 6h8a2 2 0 012 2v2a2 2 0 01-2 2H8M8 14h8a2 2 0 012 2v0a2 2 0 01-2 2H8"/></svg>`,
+        snake: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12c0-4 4-8 8-8s6 3 6 6-2 5-4 6c-2 1-4 0-4-2s2-4 4-4 4 1 4 3"/></svg>`
+    };
+
     document.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        
-        // Cegah spam notifikasi jika user klik kanan terus-menerus
         if (popupCooldown) return; 
         popupCooldown = true;
-        setTimeout(() => popupCooldown = false, 4000); // Cooldown 4 detik
+        setTimeout(() => popupCooldown = false, 4000);
 
-        // Hapus popup sebelumnya jika masih ada
         if (securityPopup) securityPopup.remove();
 
-        // Membuat elemen UI notifikasi
         securityPopup = document.createElement('div');
         securityPopup.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                <div style="width: 6px; height: 6px; background: #d4af37; border-radius: 50%; box-shadow: 0 0 6px #d4af37;"></div>
-                <div style="font-weight: 600; font-size: 13px; color: #e0e0e0; letter-spacing: 1px; text-transform: uppercase;">Nathan Security</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                ${icons.shield}
+                <div>
+                    <div style="font-weight: 600; font-size: 14px; color: #111827; line-height: 1;">Nathan Security</div>
+                    <div style="font-size: 10px; color: #9ca3af; margin-top: 2px;">Protection Active</div>
+                </div>
             </div>
-            <div style="font-size: 12px; color: #888; line-height: 1.5; margin-bottom: 12px;">
-                Akses inspeksi halaman ini dibatasi untuk melindungi integritas data dan sistem.
+            
+            <div style="font-size: 12px; color: #4b5563; line-height: 1.5; margin-bottom: 14px;">
+                Akses inspeksi halaman dibatasi untuk melindungi integritas data.
             </div>
-            <div style="font-size: 11px; color: #555; line-height: 1.6; border-top: 1px solid #2a2a2a; padding-top: 10px;">
-                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Enkripsi Storage Aktif</div>
-                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Proteksi Lalu Lintas API</div>
-                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Filter Injeksi Kode</div>
-                <div style="margin-bottom: 4px;"><span style="color:#d4af37; margin-right: 6px;">•</span> Intersep Anti-Sniffing</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
+                    ${icons.shield}
+                    <span>Enkripsi Storage Aktif</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
+                    ${icons.attack}
+                    <span>Proteksi Serangan API</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
+                    ${icons.snake}
+                    <span>Filter Injeksi Kode</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
+                    ${icons.python}
+                    <span>Intersep Anti-Sniffing</span>
+                </div>
             </div>
-            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #2a2a2a; font-size: 10px; color: #444; font-style: italic;">
-                * Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
+
+            <div style="padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; display: flex; align-items: center; gap: 6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
             </div>
         `;
 
-        // Styling CSS Pop-up (Darkmode, elegan, modern)
+        // Styling UI Clean White Modern
         securityPopup.style.cssText = `
             position: fixed;
             bottom: 24px;
             right: 24px;
-            background: rgba(18, 18, 18, 0.95);
-            border: 1px solid #333;
-            border-left: 3px solid #d4af37;
-            padding: 18px 22px;
-            border-radius: 6px;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid #3b82f6;
+            padding: 20px 24px;
+            border-radius: 8px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             z-index: 999999;
-            max-width: 280px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            pointer-events: none; /* PENTING: Tidak mengganggu klik kiri website */
+            max-width: 300px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: none; 
             opacity: 0;
-            transform: translateY(15px);
-            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            transform: translateY(10px) scale(0.98);
+            transition: opacity 0.3s ease, transform 0.3s ease;
         `;
         
         document.body.appendChild(securityPopup);
 
-        // Animasi Masuk (Muncul dari bawah)
+        // Animasi Masuk
         requestAnimationFrame(() => {
             securityPopup.style.opacity = '1';
-            securityPopup.style.transform = 'translateY(0)';
+            securityPopup.style.transform = 'translateY(0) scale(1)';
         });
 
-        // Animasi Keluar (Hilang perlahan)
+        // Animasi Keluar
         setTimeout(() => {
             if (securityPopup) {
                 securityPopup.style.opacity = '0';
-                securityPopup.style.transform = 'translateY(15px)';
-                setTimeout(() => { 
-                    if(securityPopup) securityPopup.remove(); 
-                    securityPopup = null;
-                }, 400);
+                securityPopup.style.transform = 'translateY(10px) scale(0.98)';
+                setTimeout(() => { if(securityPopup) securityPopup.remove(); securityPopup = null; }, 300);
             }
-        }, 3500); // Tampil selama 3,5 detik
+        }, 3500);
 
     }, true);
 
-    // 3. ANTI XSS INJEKSI
+    // ANTI XSS
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
