@@ -1,19 +1,15 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER + SPLIT ROUTING (Go vs Python)
+// 🚀 NITROUS BOOSTER (Letakkan Paling Atas)
 // ==========================================
 (function() {
     'use strict';
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
-    // 1. DEFINISI 2 ALAMAT SERVER
-    const PERF_API = "/api/performance"; // Golang (CEPAT)
-    const SEC_API = "/api/monitor";      // Python (AMAN)
-    
-    // Ambil base URL secara otomatis (biar cocok saat local maupun live di Vercel)
+    const PERF_API = "/api/performance"; 
+    const SEC_API = "/api/monitor";      
     const BASE_URL = window.location.origin;
 
-    // 2. MEMORI TURBO (Fetch Cache)
     const apiCache = new Map();
     const originalFetch = window.fetch;
     
@@ -31,7 +27,6 @@
             } catch(e) { cacheKey = url + body; }
         }
 
-        // Jika ada di cache lokal, kembalikan langsung (0ms)
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
             if (Date.now() - cached.time < 300000) { 
@@ -39,12 +34,10 @@
             }
         }
 
-        // JIKA BUKAN API NATHAN, BIARKAN JALAN NORMAL TANPA GANGGUAN!
         if (!url.includes('/api/performance') && !url.includes('/api/monitor')) {
             return originalFetch.apply(this, args);
         }
 
-        // JIKA INI API NATHAN, PROSES DAN SIMPAN KE CACHE
         const response = await originalFetch.apply(this, args);
         if (response.ok) {
             const cloneResponse = response.clone();
@@ -56,13 +49,11 @@
         return response;
     };
 
-    // 3. PRECONNECT AGRESIF
     const preconnect = document.createElement('link');
     preconnect.rel = 'preconnect';
     preconnect.href = BASE_URL;
     document.head.appendChild(preconnect);
 
-    // 4. DOM CRUNCHER
     window.addEventListener('load', () => {
         setTimeout(() => {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT);
@@ -76,7 +67,7 @@
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD + UI CLEAN WHITE
+// 🛡️ INVISIBLE SECURITY SHIELD + PREMIUM UI
 // ==========================================
 (function() {
     'use strict';
@@ -84,13 +75,12 @@
     window.__InvisibleShieldActive = true;
 
     const BASE_URL = window.location.origin;
-    const PERF_API = BASE_URL + "/api/performance"; // Go
-    const SEC_API = BASE_URL + "/api/monitor";      // Python
+    const PERF_API = BASE_URL + "/api/performance"; 
+    const SEC_API = BASE_URL + "/api/monitor";      
 
     const PREFIX = "ROMAN_CIPHER_V2::";
     const SALT = "SPQR_Maximus_2024";
     
-    // 1. ENKRIPSI STORAGE
     function xorCipher(text, key) {
         let r = '';
         for (let i = 0; i < text.length; i++) r += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
@@ -145,31 +135,25 @@
     }, 5000);
 
     // ==========================================
-    // 2. SPLIT HEARTBEAT (Go vs Python)
+    // SPLIT HEARTBEAT
     // ==========================================
     let isCondemned = false;
 
     async function startHealthCheck() {
         if (isCondemned) return;
-
         try {
-            // Panggil GOLANG dulu untuk cek performa & cache (Super Cepat)
             const goCheck = await fetch(PERF_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "health_check" })
             }).then(r => r.json()).catch(() => null);
 
-            // Jika Go menolak (misal ada serangan massive), STOP!
             if (goCheck && goCheck.status === "blocked") {
                 isCondemned = true;
                 return showExecutionScreen("ACCESS DENIED", "Golang Firewall Triggered");
             }
 
-            // Jika Go aman, lanjut panggil PYTHON untuk cek keamanan mendalam
             const pyCheck = await fetch(SEC_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "heartbeat", path: window.location.pathname })
             }).then(r => r.json()).catch(() => null);
 
@@ -177,26 +161,30 @@
                 isCondemned = true;
                 return showExecutionScreen("NEGATVM EST", "Python Security Triggered");
             }
-
-        } catch (e) {
-            // Biarkan silent jika gagal, jangan ganggu user
-        }
+        } catch (e) {}
     }
-
-    // Jalankan pengecekan
     startHealthCheck();
 
     // ==========================================
-    // 3. UI POPUP (PUTIH BERSIH + SVG ICONS)
+    // UI NOTIFIKASI PREMIUM (LOGO + ICONS)
     // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
 
+    // Custom SVG Icons berkualitas tinggi
     const icons = {
-        shield: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-        attack: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
-        python: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3776AB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M8 6h8a2 2 0 012 2v2a2 2 0 01-2 2H8M8 14h8a2 2 0 012 2v0a2 2 0 01-2 2H8"/></svg>`,
-        snake: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12c0-4 4-8 8-8s6 3 6 6-2 5-4 6c-2 1-4 0-4-2s2-4 4-4 4 1 4 3"/></svg>`
+        go: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="24" height="24" rx="5" fill="#00ADD8"/>
+                <path d="M7.5 7.5L12 5L16.5 7.5V11.5L12 14.5L7.5 11.5V7.5Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 14.5V19" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M7.5 11.5L4 13.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M16.5 11.5L20 13.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                <text x="12" y="9" font-family="Arial, sans-serif" font-size="4" font-weight="bold" fill="white" text-anchor="middle">GO</text>
+             </svg>`,
+        python: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C9.24 2 9 3.11 9 4.5V7H12.5V8H7.5C6.11 8 5 9.24 5 11v2.5c0 1.38 1.12 2.5 2.5 2.5H9v2.5c0 1.38 1.24 2.5 3 2.5s3-1.12 3-2.5V16h-3.5v-1H17c1.38 0 2.5-1.12 2.5-2.5V11c0-1.38-1.12-2.5-2.5-2.5H15V4.5C15 3.11 14.76 2 12 2zM9.5 17.5a.75.75 0 110 1.5.75.75 0 010-1.5zm5-11a.75.75 0 110 1.5.75.75 0 010-1.5z" fill="#3776AB"/>
+                 </svg>`,
+        info: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
     };
 
     document.addEventListener('contextmenu', function(e) {
@@ -209,54 +197,69 @@
 
         securityPopup = document.createElement('div');
         securityPopup.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                ${icons.shield}
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <img src="https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png" alt="Hybrid Engine" style="height: 36px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); object-fit: cover;">
                 <div>
-                    <div style="font-weight: 600; font-size: 14px; color: #111827; line-height: 1;">Nathan Security</div>
-                    <div style="font-size: 10px; color: #9ca3af; margin-top: 2px;">Hybrid Engine Active</div>
+                    <div style="font-weight: 700; font-size: 15px; color: #111827; letter-spacing: -0.3px;">Nathan Security</div>
+                    <div style="font-size: 11px; color: #00ADD8; margin-top: 2px; font-weight: 500;">Hybrid Engine Active</div>
                 </div>
             </div>
             
-            <div style="font-size: 12px; color: #4b5563; line-height: 1.5; margin-bottom: 14px;">
-                Akses inspeksi halaman dibatasi untuk melindungi integritas data.
+            <div style="font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 16px;">
+                Akses inspeksi halaman dibatasi untuk menjaga integritas dan performa sistem.
             </div>
             
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
-                    ${icons.snake}
-                    <span>Golang Fast Cache (Active)</span>
+            <div style="background: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px;">
+                
+                <!-- Golang Section -->
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        ${icons.go}
+                        <span style="font-weight: 600; font-size: 12px; color: #111827;">Golang</span>
+                        <span style="font-size: 9px; background: #00ADD8; color: white; padding: 1px 6px; border-radius: 10px; margin-left: auto;">PERFORMANCE</span>
+                    </div>
+                    <div style="font-size: 11px; color: #6b7280; padding-left: 26px; line-height: 1.4;">
+                        Menangani routing cepat, cache RAM super kilat, dan filter serangan DDos secara paralel.
+                    </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
-                    ${icons.shield}
-                    <span>Enkripsi Storage Aktif</span>
+
+                <!-- Python Section -->
+                <div style="border-top: 1px solid #e5e7eb; padding-top: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        ${icons.python}
+                        <span style="font-weight: 600; font-size: 12px; color: #111827;">Python</span>
+                        <span style="font-size: 9px; background: #3776AB; color: white; padding: 1px 6px; border-radius: 10px; margin-left: auto;">SECURITY</span>
+                    </div>
+                    <div style="font-size: 11px; color: #6b7280; padding-left: 26px; line-height: 1.4;">
+                        Enkripsi data sensitif, validasi payload, dan pemblokiran injeksi kode jahat.
+                    </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
-                    ${icons.attack}
-                    <span>Proteksi Serangan API</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #374151;">
-                    ${icons.python}
-                    <span>Python Deep Security</span>
-                </div>
+
             </div>
 
             <div style="padding-top: 10px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; display: flex; align-items: center; gap: 6px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                ${icons.info}
                 Nonaktifkan JavaScript di browser untuk melewati antarmuka ini.
             </div>
         `;
 
+        // Styling Mewah dan Bersih
         securityPopup.style.cssText = `
-            position: fixed; bottom: 24px; right: 24px;
-            background: rgba(255, 255, 255, 0.96); border: 1px solid #e5e7eb; border-left: 4px solid #3b82f6;
-            padding: 20px 24px; border-radius: 8px;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 20px 22px;
+            border-radius: 12px;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            z-index: 999999; max-width: 300px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            pointer-events: none; opacity: 0;
-            transform: translateY(10px) scale(0.98);
-            transition: opacity 0.3s ease, transform 0.3s ease;
+            z-index: 999999;
+            max-width: 320px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+            pointer-events: none; 
+            opacity: 0;
+            transform: translateY(15px) scale(0.97);
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         `;
         
         document.body.appendChild(securityPopup);
@@ -269,14 +272,14 @@
         setTimeout(() => {
             if (securityPopup) {
                 securityPopup.style.opacity = '0';
-                securityPopup.style.transform = 'translateY(10px) scale(0.98)';
-                setTimeout(() => { if(securityPopup) securityPopup.remove(); securityPopup = null; }, 300);
+                securityPopup.style.transform = 'translateY(15px) scale(0.97)';
+                setTimeout(() => { if(securityPopup) securityPopup.remove(); securityPopup = null; }, 350);
             }
-        }, 3500);
+        }, 4000);
 
     }, true);
 
-    // 4. ANTI XSS
+    // ANTI XSS
     const observer = new MutationObserver(mutations => {
         mutations.forEach(m => m.addedNodes.forEach(node => {
             if (node.nodeName === 'SCRIPT' && !node.src && node.textContent) {
@@ -287,7 +290,6 @@
     });
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
 
-    // Fungsi UI Blokiran
     function showExecutionScreen(title, reason) {
         window.stop(); 
         document.documentElement.innerHTML = ''; 
