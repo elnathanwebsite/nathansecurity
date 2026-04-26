@@ -1,20 +1,23 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER v3
+// 🚀 NITROUS BOOSTER v3 (CDN SAFE)
 // ==========================================
 (function() {
     'use strict';
     if (window.__NitrousActive) return;
     window.__NitrousActive = true;
 
-    const PERF_API = "/api/performance";
-    const SEC_API = "/api/monitor";
-    const BASE_URL = window.location.origin;
+    // FIX: Gunakan URL absolut CDN, bukan origin web langganan
+    const CDN_BASE = "https://nathansecurity.vercel.app";
+    const PERF_API = CDN_BASE + "/api/performance";
+    const SEC_API = CDN_BASE + "/api/monitor";
+    
     const apiCache = new Map();
     const originalFetch = window.fetch;
 
     window.fetch = async function(...args) {
         const url = (typeof args[0] === 'string') ? args[0] : args[0].url;
         const body = args[1]?.body;
+        
         let cacheKey = url;
         if (body) {
             try {
@@ -24,13 +27,19 @@
                 else cacheKey = url + body;
             } catch(e) { cacheKey = url + body; }
         }
+        
         if (apiCache.has(cacheKey)) {
             const cached = apiCache.get(cacheKey);
-            if (Date.now() - cached.time < 300000) {
+            if (Date.now() - cached.time < 300000) { // Cache 5 menit untuk performa
                 return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' } });
             }
         }
-        if (!url.includes('/api/performance') && !url.includes('/api/monitor')) return originalFetch.apply(this, args);
+        
+        // FIX: Hanya intercept request yang ditujukan untuk API NathanSecurity, biarkan API web langganan lolos begitu saja
+        if (!url.includes(CDN_BASE + "/api/")) {
+            return originalFetch.apply(this, args);
+        }
+        
         const response = await originalFetch.apply(this, args);
         if (response.ok) {
             const cloneResponse = response.clone();
@@ -42,12 +51,11 @@
         return response;
     };
 
-    [BASE_URL, 'https://nathansecurity.vercel.app'].forEach(d => {
-        const l = document.createElement('link');
-        l.rel = 'preconnect';
-        l.href = d;
-        document.head.appendChild(l);
-    });
+    // Preconnect ke CDN
+    const l = document.createElement('link');
+    l.rel = 'preconnect';
+    l.href = CDN_BASE;
+    document.head.appendChild(l);
 
     window.addEventListener('load', () => {
         setTimeout(() => {
@@ -60,19 +68,21 @@
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD v3
+// 🛡️ INVISIBLE SECURITY SHIELD v3 (CDN SAFE)
 // ==========================================
 (function() {
     'use strict';
     if (window.__InvisibleShieldActive) return;
     window.__InvisibleShieldActive = true;
 
-    const BASE_URL = window.location.origin;
-    const PERF_API = BASE_URL + "/api/performance";
-    const SEC_API = BASE_URL + "/api/monitor";
+    const CDN_BASE = "https://nathansecurity.vercel.app";
+    const PERF_API = CDN_BASE + "/api/performance";
+    const SEC_API = CDN_BASE + "/api/monitor";
+    
     const PREFIX = "ROMAN_CIPHER_V3::";
     const SALT = "SPQR_Maximus_2024_Imperium";
     const LOGO_URL = "https://i.ibb.co.com/4wNrYy7n/python-vs-go-slim.png";
+    const NS_MARKER = "NS_SAFE::"; // Marker eksklusif agar tidak merusak data web langganan
 
     function xorCipher(text, key) {
         let r = '';
@@ -108,33 +118,24 @@
         } catch(e) { return data; }
     }
 
-    const SENSITIVE = [
-        /@gmail\.com/i, /@yahoo\.com/i, /@outlook\.com/i, /@hotmail\.com/i,
-        /user[_-]?token/i, /api[_-]?key/i, /access[_-]?token/i, /refresh[_-]?token/i,
-        /password/i, /\bemail\b/i, /\bphone\b/i, /\bcredit[_-]?card\b/i,
-        /\bssn\b/i, /\bpassport\b/i, /\bsecret\b/i, /\bprivate[_-]?key\b/i,
-        /\bbearer\s+/i, /\bauthorization\b/i, /\bcookie\b/i, /\bsession[_-]?id\b/i
-    ];
-
-    function isSensitive(data) {
-        if (typeof data !== 'string') return false;
-        try { return SENSITIVE.some(p => p.test(JSON.parse(data))); } catch(e) { return SENSITIVE.some(p => p.test(data)); }
-    }
-
+    // FIX: Override LocalStorage secara AMAN. 
+    // Hanya akan mengenkripsi jika developer web sengaja menandai dengan "NS_SAFE::"
+    // Token login, session, dan API key web langganan akan 100% aman dan tidak diutak-atik.
     const origLSSet = Storage.prototype.setItem;
     const origLSGet = Storage.prototype.getItem;
-    Storage.prototype.setItem = function(k, v) { origLSSet.call(this, k, isSensitive(v) ? encryptData(v) : v); };
-    Storage.prototype.getItem = function(k) { const r = origLSGet.call(this, k); return (r && r.startsWith(PREFIX)) ? decryptData(r) : r; };
-
-    setInterval(() => {
-        try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                const raw = origLSGet.call(localStorage, key);
-                if (raw && isSensitive(raw) && !raw.startsWith(PREFIX)) origLSSet.call(localStorage, key, encryptData(raw));
-            }
-        } catch (e) {}
-    }, 5000);
+    
+    Storage.prototype.setItem = function(k, v) { 
+        if (typeof v === 'string' && v.startsWith(NS_MARKER)) {
+            origLSSet.call(this, k, encryptData(v)); 
+        } else {
+            origLSSet.call(this, k, v);
+        }
+    };
+    
+    Storage.prototype.getItem = function(k) { 
+        const r = origLSGet.call(this, k); 
+        return (r && typeof r === 'string' && r.startsWith(PREFIX)) ? decryptData(r) : r; 
+    };
 
     // Print Protection
     const printStyle = document.createElement('style');
@@ -160,7 +161,10 @@
     document.addEventListener('copy', function(e) {
         const sel = window.getSelection().toString();
         if (sel.length > 0) {
-            if (SENSITIVE.some(p => p.test(sel))) { e.preventDefault(); showMiniToast('🔒 Data sensitif tidak dapat disalin'); return; }
+            // Cek sensitif ringan hanya saat copy, tidak mengganggu localStorage
+            if (/@gmail\.com|@yahoo\.com|password|credit.?card/i.test(sel)) { 
+                e.preventDefault(); showMiniToast('🔒 Data sensitif tidak dapat disalin'); return; 
+            }
             e.clipboardData.setData('text/plain', sel + '\n\n━━━━━━━━━━━━━━━━\n🛡️ Nathan Security\n📅 ' + new Date().toLocaleString('id-ID') + '\n━━━━━━━━━━━━━━━━');
             e.preventDefault();
         }
@@ -202,7 +206,7 @@
         if (e.ctrlKey && (k === 'u' || k === 's')) { e.preventDefault(); return false; }
     }, true);
 
-    // Heartbeat
+    // Heartbeat (FIX: Sekarang mengarah ke API NathanSecurity, bukan API Web Langganan)
     let isCondemned = false;
     async function startHealthCheck() {
         if (isCondemned) return;
@@ -233,12 +237,11 @@
     }
 
     // ==========================================
-    // 🖼️ CONTEXT MENU POPUP - GAMBAR DI ATAS JUDUL
+    // 🖼️ CONTEXT MENU POPUP
     // ==========================================
     let securityPopup = null;
     let popupCooldown = false;
 
-    // Preload image agar tidak flicker
     const imgPreload = new Image();
     imgPreload.src = LOGO_URL;
 
@@ -256,203 +259,72 @@
         }
 
         securityPopup = document.createElement('div');
-
-        // ── GAMBAR BESAR DI PALING ATAS ──
-        // ── LALU JUDUL DI BAWAH GAMBAR ──
         securityPopup.innerHTML = `
             <div class="ns-popup-image-wrap">
                 <img src="${LOGO_URL}" alt="Nathan Security" class="ns-popup-img" onerror="this.style.display='none'">
             </div>
-
             <div class="ns-popup-title">Nathan Security</div>
-
             <div class="ns-popup-badge">HYBRID ENGINE ACTIVE</div>
-
-            <div class="ns-popup-desc">
-                Akses inspeksi halaman dibatasi untuk melindungi integritas data dan keamanan pengguna.
-            </div>
-
+            <div class="ns-popup-desc">Akses inspeksi halaman dibatasi untuk melindungi integritas data dan keamanan pengguna.</div>
             <div class="ns-popup-cards">
                 <div class="ns-card ns-card-go">
                     <div class="ns-card-dot ns-dot-go"></div>
                     <div class="ns-card-body">
                         <div class="ns-card-title">Golang</div>
-                        <div class="ns-card-text">
-                            <span class="ns-highlight-go">Performa:</span> Cache RAM kilat, routing lalu lintas, penangkal serangan DDoS, rate limiting O(1).
-                        </div>
+                        <div class="ns-card-text"><span class="ns-highlight-go">Performa:</span> Cache RAM kilat, routing lalu lintas, penangkal serangan DDoS, rate limiting O(1).</div>
                     </div>
                 </div>
                 <div class="ns-card ns-card-py">
                     <div class="ns-card-dot ns-dot-py"></div>
                     <div class="ns-card-body">
                         <div class="ns-card-title">Python</div>
-                        <div class="ns-card-text">
-                            <span class="ns-highlight-py">Keamanan:</span> Enkripsi data sensitif, validasi SQLi/XSS, pengamanan storage.
-                        </div>
+                        <div class="ns-card-text"><span class="ns-highlight-py">Keamanan:</span> Enkripsi data sensitif, validasi SQLi/XSS, pengamanan storage.</div>
                     </div>
                 </div>
             </div>
-
             <div class="ns-popup-grid">
                 <div class="ns-grid-item"><div class="ns-grid-icon">🛡️</div><div class="ns-grid-label">XSS</div></div>
                 <div class="ns-grid-item"><div class="ns-grid-icon">💉</div><div class="ns-grid-label">SQLi</div></div>
                 <div class="ns-grid-item"><div class="ns-grid-icon">🚫</div><div class="ns-grid-label">CSRF</div></div>
                 <div class="ns-grid-item"><div class="ns-grid-icon">🖱️</div><div class="ns-grid-label">Clickjack</div></div>
             </div>
-
             <div class="ns-popup-footer">
                 Shield v3.0 · 13 Active Modules · Encrypted Storage<br>
                 <span class="ns-footer-hint">* Matikan JavaScript untuk melewati antarmuka ini</span>
             </div>
         `;
 
-        // ── INJECT STYLES ──
         const styleId = 'ns-popup-style-v3';
         if (!document.getElementById(styleId)) {
             const s = document.createElement('style');
             s.id = styleId;
             s.textContent = `
-                .ns-popup-image-wrap {
-                    width: 100%;
-                    display: flex;
-                    justify-content: center;
-                    margin-bottom: 16px;
-                    padding-top: 4px;
-                }
-                .ns-popup-img {
-                    width: 200px;
-                    height: auto;
-                    border-radius: 12px;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
-                    object-fit: contain;
-                    display: block;
-                }
-                .ns-popup-title {
-                    font-weight: 800;
-                    font-size: 18px;
-                    color: #111827;
-                    text-align: center;
-                    letter-spacing: -0.5px;
-                    line-height: 1.2;
-                    margin-bottom: 8px;
-                }
-                .ns-popup-badge {
-                    text-align: center;
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: #00ADD8;
-                    letter-spacing: 1.5px;
-                    background: rgba(0,173,216,0.08);
-                    display: inline-block;
-                    padding: 4px 14px;
-                    border-radius: 20px;
-                    margin: 0 auto 16px auto;
-                    width: auto;
-                }
-                /* center the badge */
-                .ns-popup-badge {
-                    display: block;
-                    text-align: center;
-                    width: fit-content;
-                    margin-left: auto;
-                    margin-right: auto;
-                    margin-bottom: 16px;
-                }
-                .ns-popup-desc {
-                    font-size: 12px;
-                    color: #6b7280;
-                    text-align: center;
-                    line-height: 1.6;
-                    margin-bottom: 18px;
-                    padding: 0 2px;
-                }
-                .ns-popup-cards {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    margin-bottom: 16px;
-                }
-                .ns-card {
-                    display: flex;
-                    gap: 12px;
-                    align-items: flex-start;
-                    padding: 14px;
-                    border-radius: 10px;
-                }
-                .ns-card-go {
-                    background: linear-gradient(135deg, rgba(0,173,216,0.05), rgba(0,173,216,0.01));
-                    border: 1px solid rgba(0,173,216,0.12);
-                }
-                .ns-card-py {
-                    background: linear-gradient(135deg, rgba(55,118,171,0.05), rgba(55,118,171,0.01));
-                    border: 1px solid rgba(55,118,171,0.12);
-                }
-                .ns-card-dot {
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 50%;
-                    flex-shrink: 0;
-                    margin-top: 4px;
-                }
-                .ns-dot-go { background: #00ADD8; }
-                .ns-dot-py { background: #3776AB; }
+                .ns-popup-image-wrap { width: 100%; display: flex; justify-content: center; margin-bottom: 16px; padding-top: 4px; }
+                .ns-popup-img { width: 200px; height: auto; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.10); object-fit: contain; display: block; }
+                .ns-popup-title { font-weight: 800; font-size: 18px; color: #111827; text-align: center; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 8px; }
+                .ns-popup-badge { text-align: center; font-size: 10px; font-weight: 700; color: #00ADD8; letter-spacing: 1.5px; background: rgba(0,173,216,0.08); display: block; text-align: center; width: fit-content; margin-left: auto; margin-right: auto; margin-bottom: 16px; padding: 4px 14px; border-radius: 20px; }
+                .ns-popup-desc { font-size: 12px; color: #6b7280; text-align: center; line-height: 1.6; margin-bottom: 18px; padding: 0 2px; }
+                .ns-popup-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+                .ns-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 10px; }
+                .ns-card-go { background: linear-gradient(135deg, rgba(0,173,216,0.05), rgba(0,173,216,0.01)); border: 1px solid rgba(0,173,216,0.12); }
+                .ns-card-py { background: linear-gradient(135deg, rgba(55,118,171,0.05), rgba(55,118,171,0.01)); border: 1px solid rgba(55,118,171,0.12); }
+                .ns-card-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+                .ns-dot-go { background: #00ADD8; } .ns-dot-py { background: #3776AB; }
                 .ns-card-body { flex: 1; }
-                .ns-card-title {
-                    font-weight: 700;
-                    font-size: 13px;
-                    color: #111827;
-                    margin-bottom: 3px;
-                }
-                .ns-card-text {
-                    font-size: 11px;
-                    color: #6b7280;
-                    line-height: 1.55;
-                }
-                .ns-highlight-go { color: #00ADD8; font-weight: 600; }
-                .ns-highlight-py { color: #3776AB; font-weight: 600; }
-                .ns-popup-grid {
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 8px;
-                    margin-bottom: 16px;
-                }
-                .ns-grid-item {
-                    text-align: center;
-                    padding: 8px 4px;
-                    background: #f9fafb;
-                    border-radius: 8px;
-                }
-                .ns-grid-icon { font-size: 16px; margin-bottom: 2px; }
-                .ns-grid-label { font-size: 9px; color: #6b7280; font-weight: 600; letter-spacing: 0.3px; }
-                .ns-popup-footer {
-                    padding-top: 14px;
-                    border-top: 1px solid #f3f4f6;
-                    font-size: 10px;
-                    color: #9ca3af;
-                    text-align: center;
-                    line-height: 1.6;
-                }
+                .ns-card-title { font-weight: 700; font-size: 13px; color: #111827; margin-bottom: 3px; }
+                .ns-card-text { font-size: 11px; color: #6b7280; line-height: 1.55; }
+                .ns-highlight-go { color: #00ADD8; font-weight: 600; } .ns-highlight-py { color: #3776AB; font-weight: 600; }
+                .ns-popup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+                .ns-grid-item { text-align: center; padding: 8px 4px; background: #f9fafb; border-radius: 8px; }
+                .ns-grid-icon { font-size: 16px; margin-bottom: 2px; } .ns-grid-label { font-size: 9px; color: #6b7280; font-weight: 600; letter-spacing: 0.3px; }
+                .ns-popup-footer { padding-top: 14px; border-top: 1px solid #f3f4f6; font-size: 10px; color: #9ca3af; text-align: center; line-height: 1.6; }
                 .ns-footer-hint { color: #d1d5db; }
             `;
             document.head.appendChild(s);
         }
 
         securityPopup.style.cssText = `
-            position: fixed;
-            bottom: 28px;
-            right: 28px;
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            padding: 24px 24px 20px 24px;
-            border-radius: 16px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            z-index: 999999;
-            width: 340px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.02);
-            pointer-events: none;
-            opacity: 0;
-            transform: translateY(16px) scale(0.97);
-            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            position: fixed; bottom: 28px; right: 28px; background: #ffffff; border: 1px solid #e5e7eb; padding: 24px 24px 20px 24px; border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; z-index: 999999; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.02); pointer-events: none; opacity: 0; transform: translateY(16px) scale(0.97); transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         `;
 
         document.body.appendChild(securityPopup);
