@@ -9,7 +9,7 @@ from upstash_redis import Redis
 from cryptography.fernet import Fernet
 
 # ============================================
-# ⚙️ SETUP
+# ⚙️ SETUP KONEKSI
 # ============================================
 redis = Redis(
     url=os.environ.get("UPSTASH_REDIS_REST_URL"),
@@ -21,6 +21,7 @@ if not encrypt_key:
     encrypt_key = Fernet.generate_key()
 cipher_suite = Fernet(encrypt_key)
 
+# Pola racun yang 100% pasti jahat
 MALICIOUS_PATTERNS = [
     (r'(?i)(union\s+select|insert\s+into\s|drop\s+table)', 'SQL_INJECTION'),
     (r'(?i)(<script.*?>|javascript:\s*|onerror\s*=)', 'XSS_ATTACK'),
@@ -34,20 +35,20 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        # WAJIB: Izinkan header API LLM/AI agar tidak kena CORS Error
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Api-Key')
-        # TURBO: Paksa browser menyimpan data statis lebih lama
-        self.send_header('Cache-Control', 'public, max-age=86400') 
         self.end_headers()
 
     def do_POST(self):
         try:
             client_ip = self.headers.get('x-forwarded-for', 'unknown').split(',')[0].strip()
             
+            # 1. CEK BANNED IP
             if redis.exists(f"ban:{client_ip}"):
                 return self.respond_banned(client_ip)
 
             content_length = int(self.headers.get('Content-Length', 0))
-            if content_length > 50000: 
+            if content_length > 50000: # Batas 50KB untuk request LLM/API
                 self.ban_ip(client_ip, 3600, "OVERSIZED_PAYLOAD")
                 return self.respond_banned(client_ip)
 
@@ -55,45 +56,46 @@ class handler(BaseHTTPRequestHandler):
             action = body.get('action', '')
             payload = body.get('data', '')
 
+            # 2. ANTI RACUN (SQLi / XSS)
             if payload and self.contains_malicious_payload(payload):
                 self.ban_ip(client_ip, 86400, "MALICIOUS_PAYLOAD")
                 return self.respond_banned(client_ip)
 
             # ==========================================
-            # ROUTING DENGAN TURBO DATABASE CACHE
+            # A. FITUR KEAMANAN (DIPROTEKSI RATE LIMIT + TURBO CACHE)
             # ==========================================
-            
             if action == 'hide_data':
                 if not self.check_limit(f"sec:{client_ip}", 10, 60):
                     self.ban_ip(client_ip, 1800, "SECURITY_SPAM")
                     return self.respond_banned(client_ip)
                     
-                # TURBO CACHE: Cek apakah data ini pernah di-hide sebelumnya
+                # TURBO DB: Cek cache berdasarkan hash payload
                 cache_key = f"cache:hide:{hashlib.md5(str(payload).encode()).hexdigest()}"
                 cached_result = redis.get(cache_key)
                 
                 if cached_result:
-                    # Kalau sudah pernah, langsung kasih tanpa proses ulang!
                     result = cached_result
+                    is_boosted = True
                 else:
-                    # Kalau belum, proses dan simpan ke database selama 1 jam
                     encoded = base64.b64encode(str(payload).encode()).decode()
                     result = "ROMAN_CIPHER_V2::" + encoded[::-1]
                     redis.setex(cache_key, 3600, result) # Simpan 1 jam
+                    is_boosted = False
                     
-                return self.send_json({"status": "success", "result": result, "boosted": bool(cached_result)})
+                return self.send_json({"status": "success", "result": result, "boosted": is_boosted})
 
             if action in ['encrypt', 'decrypt']:
                 if not self.check_limit(f"sec:{client_ip}", 20, 60):
                     self.ban_ip(client_ip, 3600, "CRYPTO_ABUSE")
                     return self.respond_banned(client_ip)
                 
-                # TURBO CACHE: Untuk enkripsi/decrypt yang sama
+                # TURBO DB: Cek cache berdasarkan hash aksi + payload
                 cache_key = f"cache:crypto:{hashlib.md5((action+str(payload)).encode()).hexdigest()}"
                 cached_result = redis.get(cache_key)
                 
                 if cached_result:
                     result = cached_result
+                    is_boosted = True
                 else:
                     if action == 'encrypt':
                         p = json.dumps(payload) if isinstance(payload, (dict, list)) else str(payload)
@@ -101,10 +103,15 @@ class handler(BaseHTTPRequestHandler):
                     else:
                         result = cipher_suite.decrypt(cipher_suite.decrypt(payload.encode())).decode()
                     redis.setex(cache_key, 1800, result) # Simpan 30 menit
+                    is_boosted = False
                     
-                return self.send_json({"status": "success", "result": result, "boosted": bool(cached_result)})
+                return self.send_json({"status": "success", "result": result, "boosted": is_boosted})
 
+            # ==========================================
             # B. REQUEST API / LLM NORMAL (LOLOS TANPA GANDELAN)
+            # ==========================================
+            # Jika action kosong atau action API lainnya, langsung izinkan.
+            # Tidak ada rate limit, tidak ada pencekakan yang bikin LLM error.
             return self.send_json({"status": "allowed"})
 
         except json.JSONDecodeError:
