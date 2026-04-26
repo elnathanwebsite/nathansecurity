@@ -1,170 +1,199 @@
-package main
+package api // Vercel menggunakan nama folder atau 'api' sebagai package untuk serverless
 
 import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "log"
-    "net/http"
-    "regexp"
-    "strings"
-    "sync"
-    "sync/atomic"
-    "time"
-
-    "github.com/valyala/fasthttp"
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 )
 
 const pythonVaultURL = "https://nathansecurity.vercel.app/api/monitor"
 
-// ... (ipState, cache, patterns sama seperti di atas) ...
-
 var (
-    httpClient = &http.Client{
-        Timeout: 2 * time.Second,
-        Transport: &http.Transport{
-            MaxIdleConns:        200,
-            MaxIdleConnsPerHost: 200,
-            IdleConnTimeout:     90 * time.Second,
-            ForceAttemptHTTP2:   true,
-        },
-    }
-    
-    bufPool = sync.Pool{
-        New: func() interface{} { return new(bytes.Buffer) },
-    }
+	httpClient = &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        200,
+			MaxIdleConnsPerHost: 200,
+			IdleConnTimeout:     90 * time.Second,
+			ForceAttemptHTTP2:   true,
+		},
+	}
 
-    // FastHTTP pre-built responses
-    respAllowed    = []byte(`{"status":"allowed"}`)
-    respBlocked    = []byte(`{"status":"blocked"}`)
-    respMalicious  = []byte(`{"status":"blocked","reason":"MALICIOUS"}`)
-    respPythonDown = []byte(`{"status":"PYTHON_VAULT_DOWN"}`)
+	// Pre-built responses (dalam bentuk bytes untuk efisiensi)
+	respAllowed    = []byte(`{"status":"allowed"}`)
+	respBlocked    = []byte(`{"status":"blocked"}`)
+	respMalicious  = []byte(`{"status":"blocked","reason":"MALICIOUS"}`)
+	respPythonDown = []byte(`{"status":"PYTHON_VAULT_DOWN"}`)
 )
 
-func securityHandlerFast(ctx *fasthttp.RequestCtx) {
-    // ── CORS Preflight ──
-    if string(ctx.Method()) == "OPTIONS" {
-        ctx.SetContentType("text/plain")
-        ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
-        ctx.Response.Header.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-        ctx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key")
-        ctx.SetStatusCode(200)
-        return
-    }
+// =====================================================================
+// BAGIAN DUMMY FUNGSI & STRUCT (GANTI DENGAN LOGIKA ASLIMU)
+// Karena logika IP State, Cache, dan Regex terpotong di kodemu,
+// saya buatkan kerangka dasarnya agar tidak error saat di-build Vercel.
+// =====================================================================
 
-    // ── Extract IP ──
-    ip := string(ctx.Request.Header.Peek("X-Forwarded-For"))
-    if ip == "" {
-        ip = ctx.RemoteIP().String()
-    } else if idx := strings.IndexByte(ip, ','); idx != -1 {
-        ip = strings.TrimSpace(ip[:idx])
-    }
+type IPState struct{}
 
-    // ── IP State ──
-    state := getIPState(ip)
-    now := time.Now().UnixNano()
+func (s *IPState) isBanned(now int64) bool { return false } // Ganti dengan aslimu
+func (s *IPState) allow(now int64) bool    { return true }  // Ganti dengan aslimu
+func (s *IPState) ban(now int64)           {}               // Ganti dengan aslimu
 
-    if state.isBanned(now) {
-        ctx.SetContentType("application/json")
-        ctx.Write(respBlocked)
-        return
-    }
-
-    // ── Parse Body: Zero-copy where possible ──
-    body := ctx.PostBody()
-    var req map[string]interface{}
-    if len(body) > 2 {
-        json.Unmarshal(body, &req)
-    }
-
-    action, _ := req["action"].(string)
-    payload, _ := req["data"].(string)
-
-    // ── Malicious Check ──
-    if len(payload) > 3 && isMalicious(payload) {
-        state.ban(now)
-        ctx.SetContentType("application/json")
-        ctx.Write(respMalicious)
-        return
-    }
-
-    // ── Rate Limit ──
-    if !state.allow(now) {
-        state.ban(now)
-        ctx.SetContentType("application/json")
-        ctx.Write(respBlocked)
-        return
-    }
-
-    ctx.SetContentType("application/json")
-    ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
-
-    // ── Fast Path ──
-    if action != "hide_data" && action != "encrypt" && action != "decrypt" {
-        ctx.Write(respAllowed)
-        return
-    }
-
-    // ── Hide Data with Cache ──
-    if action == "hide_data" {
-        if cached, ok := cacheGet(payload); ok {
-            ctx.Write([]byte(`{"status":"success","result":"`))
-            ctx.Write(cached)
-            ctx.Write([]byte(`","boosted":true}`))
-            return
-        }
-
-        result, err := proxyToPython(req)
-        if err == nil && result["status"] == "success" {
-            if resStr, ok := result["result"].(string); ok {
-                resBytes := []byte(resStr)
-                cacheSet(payload, resBytes)
-                ctx.Write([]byte(`{"status":"success","result":"`))
-                ctx.Write(resBytes)
-                ctx.Write([]byte(`","boosted":false}`))
-                return
-            }
-        }
-        ctx.SetStatusCode(500)
-        ctx.Write(respPythonDown)
-        return
-    }
-
-    // ── Encrypt/Decrypt ──
-    result, err := proxyToPython(req)
-    if err != nil {
-        ctx.SetStatusCode(500)
-        ctx.Write(respPythonDown)
-        return
-    }
-
-    buf := bufPool.Get().(*bytes.Buffer)
-    buf.Reset()
-    json.NewEncoder(buf).Encode(result)
-    ctx.Write(buf.Bytes())
-    bufPool.Put(buf)
+func getIPState(ip string) *IPState {
+	return &IPState{} // Ganti dengan aslimu
 }
 
-func main() {
-    startCacheCleaner()
+func isMalicious(payload string) bool {
+	return false // Ganti dengan aslimu (Regex Check)
+}
 
-    // FastHTTP server - zero memory allocation per request
-    server := &fasthttp.Server{
-        Handler:               securityHandlerFast,
-        Name:                  "NathanUltra/2.0",
-        MaxRequestBodySize:    65536,
-        ReadTimeout:           time.Second * 8,
-        WriteTimeout:          time.Second * 8,
-        IdleTimeout:           time.Second * 120,
-        MaxConnsPerIP:         100,
-        Concurrency:           0, // unlimited
-        ReduceMemoryUsage:     true,
-        StreamRequestBody:     false,
-        HeaderReceivedTimeout: time.Second * 3,
-    }
+func cacheGet(key string) ([]byte, bool) {
+	return nil, false // Ganti dengan aslimu (Global Map/Sync Map Check)
+}
 
-    log.Println("🚀 Nathan EXTREME Engine (FastHTTP) Started on :8080")
-    if err := server.ListenAndServe(":8080"); err != nil {
-        log.Fatal(err)
-    }
+func cacheSet(key string, val []byte) {
+	// Ganti dengan aslimu
+}
+
+func proxyToPython(req map[string]interface{}) (map[string]interface{}, error) {
+	// Contoh implementasi standar proxyToPython
+	reqBody, _ := json.Marshal(req)
+	httpReq, _ := http.NewRequest("POST", pythonVaultURL, bytes.NewBuffer(reqBody))
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result, nil
+}
+
+// =====================================================================
+// END OF DUMMY
+// =====================================================================
+
+// Handler adalah entry point WAJIB untuk Vercel Serverless Function Golang
+func Handler(w http.ResponseWriter, r *http.Request) {
+	// ── CORS Preflight ──
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// ── Extract IP ──
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		// Mengambil IP dari RemoteAddr (format: IP:Port)
+		ip = strings.Split(r.RemoteAddr, ":")[0]
+	} else if idx := strings.IndexByte(ip, ','); idx != -1 {
+		ip = strings.TrimSpace(ip[:idx])
+	}
+
+	// ── IP State ──
+	state := getIPState(ip)
+	now := time.Now().UnixNano()
+
+	if state.isBanned(now) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write(respBlocked)
+		return
+	}
+
+	// ── Parse Body ──
+	var req map[string]interface{}
+	if r.Body != nil {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err == nil && len(bodyBytes) > 2 {
+			json.Unmarshal(bodyBytes, &req)
+		}
+		r.Body.Close()
+	}
+
+	action, _ := req["action"].(string)
+	payload, _ := req["data"].(string)
+
+	// ── Malicious Check ──
+	if len(payload) > 3 && isMalicious(payload) {
+		state.ban(now)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write(respMalicious)
+		return
+	}
+
+	// ── Rate Limit ──
+	if !state.allow(now) {
+		state.ban(now)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write(respBlocked)
+		return
+	}
+
+	// Set header utama untuk response sukses
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// ── Fast Path ──
+	if action != "hide_data" && action != "encrypt" && action != "decrypt" {
+		w.WriteHeader(http.StatusOK)
+		w.Write(respAllowed)
+		return
+	}
+
+	// ── Hide Data with Cache ──
+	if action == "hide_data" {
+		// Cek Cache
+		if cached, ok := cacheGet(payload); ok {
+			response := map[string]interface{}{
+				"status":  "success",
+				"result":  string(cached),
+				"boosted": true,
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Teruskan ke Python Vault
+		result, err := proxyToPython(req)
+		if err == nil && result["status"] == "success" {
+			if resStr, ok := result["result"].(string); ok {
+				resBytes := []byte(resStr)
+				cacheSet(payload, resBytes)
+
+				response := map[string]interface{}{
+					"status":  "success",
+					"result":  string(resBytes), // kembalikan sebagai string agar format JSON aman
+					"boosted": false,
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(respPythonDown)
+		return
+	}
+
+	// ── Encrypt/Decrypt ──
+	result, err := proxyToPython(req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(respPythonDown)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
 }
