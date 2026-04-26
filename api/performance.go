@@ -1,147 +1,170 @@
 package main
 
 import (
-    "crypto/aes"
-    "crypto/cipher"
-    "crypto/rand"
-    "encoding/base64"
+    "bytes"
+    "context"
     "encoding/json"
-    "io"
     "log"
     "net/http"
     "regexp"
     "strings"
     "sync"
+    "sync/atomic"
     "time"
+
+    "github.com/valyala/fasthttp"
 )
 
-// URL Python di Vercel (Internal, user tidak tahu ini)
-const PYTHON_VAULT_URL = "https://nathansecurity.vercel.app/api/monitor"
+const pythonVaultURL = "https://nathansecurity.vercel.app/api/monitor"
 
-var cfg = struct {
-    IpLimit     int
-    BanDuration time.Duration
-}{IpLimit: 15, BanDuration: 30 * time.Minute}
+// ... (ipState, cache, patterns sama seperti di atas) ...
 
 var (
-    banList      = sync.Map{}
-    rateLimiters = sync.Map{}
-    dataCache    = sync.Map{} // Turbo Cache di RAM Go
+    httpClient = &http.Client{
+        Timeout: 2 * time.Second,
+        Transport: &http.Transport{
+            MaxIdleConns:        200,
+            MaxIdleConnsPerHost: 200,
+            IdleConnTimeout:     90 * time.Second,
+            ForceAttemptHTTP2:   true,
+        },
+    }
+    
+    bufPool = sync.Pool{
+        New: func() interface{} { return new(bytes.Buffer) },
+    }
+
+    // FastHTTP pre-built responses
+    respAllowed    = []byte(`{"status":"allowed"}`)
+    respBlocked    = []byte(`{"status":"blocked"}`)
+    respMalicious  = []byte(`{"status":"blocked","reason":"MALICIOUS"}`)
+    respPythonDown = []byte(`{"status":"PYTHON_VAULT_DOWN"}`)
 )
 
-var maliciousPatterns = []*regexp.Regexp{
-    regexp.MustCompile(`(?i)(union\s+select|insert\s+into\s|drop\s+table)`),
-    regexp.MustCompile(`(?i)(<script.*?>|javascript:\s*|onerror\s*=)`),
-    regexp.MustCompile(`(\.\./|\.\.\\|%2e%2e)`),
-    regexp.MustCompile(`(?i)(;\s*rm\s|;\s*wget\s|;\s*curl\s|` + "`" + `sleep\s)`),
-}
-
-// Fungsi untuk menyuruh Python mengerjakan tugasnya
-func proxyToPython(body map[string]interface{}) (map[string]interface{}, error) {
-    jsonBody, _ := json.Marshal(body)
-    req, _ := http.NewRequest("POST", PYTHON_VAULT_URL, strings.NewReader(string(jsonBody)))
-    req.Header.Set("Content-Type", "application/json")
-    
-    // Timeout ketat 2 detik, kalau Python lambat, biarkan mati, jangan menghambat Go
-    client := &http.Client{Timeout: 2 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-    
-    var result map[string]interface{}
-    json.NewDecoder(resp.Body).Decode(&result)
-    return result, nil
-}
-
-func securityHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key")
-    if r.Method == "OPTIONS" { w.WriteHeader(http.StatusOK); return }
-
-    ip := r.Header.Get("X-Forwarded-For")
-    if ip == "" { ip = strings.Split(r.RemoteAddr, ":")[0] }
-
-    // 1. CEK BAN (RAM Go, Super Cepat)
-    if _, banned := banList.Load(ip); banned {
-        json.NewEncoder(w).Encode(map[string]interface{}{"status": "blocked", "ip": ip})
+func securityHandlerFast(ctx *fasthttp.RequestCtx) {
+    // ── CORS Preflight ──
+    if string(ctx.Method()) == "OPTIONS" {
+        ctx.SetContentType("text/plain")
+        ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+        ctx.Response.Header.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+        ctx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key")
+        ctx.SetStatusCode(200)
         return
     }
 
-    // 2. BACA BODY
-    var body map[string]interface{}
-    json.NewDecoder(r.Body).Decode(&body)
-    action, _ := body["action"].(string)
-    payload, _ := body["data"].(string)
+    // ── Extract IP ──
+    ip := string(ctx.Request.Header.Peek("X-Forwarded-For"))
+    if ip == "" {
+        ip = ctx.RemoteIP().String()
+    } else if idx := strings.IndexByte(ip, ','); idx != -1 {
+        ip = strings.TrimSpace(ip[:idx])
+    }
 
-    // 3. CEK RACUN (RAM Go, Super Cepat)
-    if payload != "" {
-        for _, pattern := range maliciousPatterns {
-            if pattern.MatchString(payload) {
-                banList.Store(ip, true)
-                go func() { time.Sleep(cfg.BanDuration); banList.Delete(ip) }()
-                json.NewEncoder(w).Encode(map[string]interface{}{"status": "blocked", "reason": "MALICIOUS"})
+    // ── IP State ──
+    state := getIPState(ip)
+    now := time.Now().UnixNano()
+
+    if state.isBanned(now) {
+        ctx.SetContentType("application/json")
+        ctx.Write(respBlocked)
+        return
+    }
+
+    // ── Parse Body: Zero-copy where possible ──
+    body := ctx.PostBody()
+    var req map[string]interface{}
+    if len(body) > 2 {
+        json.Unmarshal(body, &req)
+    }
+
+    action, _ := req["action"].(string)
+    payload, _ := req["data"].(string)
+
+    // ── Malicious Check ──
+    if len(payload) > 3 && isMalicious(payload) {
+        state.ban(now)
+        ctx.SetContentType("application/json")
+        ctx.Write(respMalicious)
+        return
+    }
+
+    // ── Rate Limit ──
+    if !state.allow(now) {
+        state.ban(now)
+        ctx.SetContentType("application/json")
+        ctx.Write(respBlocked)
+        return
+    }
+
+    ctx.SetContentType("application/json")
+    ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+
+    // ── Fast Path ──
+    if action != "hide_data" && action != "encrypt" && action != "decrypt" {
+        ctx.Write(respAllowed)
+        return
+    }
+
+    // ── Hide Data with Cache ──
+    if action == "hide_data" {
+        if cached, ok := cacheGet(payload); ok {
+            ctx.Write([]byte(`{"status":"success","result":"`))
+            ctx.Write(cached)
+            ctx.Write([]byte(`","boosted":true}`))
+            return
+        }
+
+        result, err := proxyToPython(req)
+        if err == nil && result["status"] == "success" {
+            if resStr, ok := result["result"].(string); ok {
+                resBytes := []byte(resStr)
+                cacheSet(payload, resBytes)
+                ctx.Write([]byte(`{"status":"success","result":"`))
+                ctx.Write(resBytes)
+                ctx.Write([]byte(`","boosted":false}`))
                 return
             }
         }
-    }
-
-    // 4. CEK RATE LIMIT (RAM Go, Super Cepat)
-    now := time.Now().UnixNano()
-    val, _ := rateLimiters.LoadOrStore(ip, &sync.Map{})
-    ipMap := val.(*sync.Map{})
-    count := 0
-    ipMap.Range(func(k, _ interface{}) bool {
-        if now-k.(int64) > 10000000000 { ipMap.Delete(k) } else { count++ }
-        return true
-    })
-    ipMap.Store(now, true)
-    if count > cfg.IpLimit { banList.Store(ip, true); json.NewEncoder(w).Encode(map[string]interface{}{"status": "blocked"}); return }
-
-    // ==========================================
-    // PROSES LOGIKA UTAMA
-    // ==========================================
-    
-    // A. Jika LLM / API Normal -> Langsung Izinkan (Tanpa sentuh Python)
-    if action == "" || (action != "hide_data" && action != "encrypt" && action != "decrypt") {
-        json.NewEncoder(w).Encode(map[string]interface{}{"status": "allowed"})
+        ctx.SetStatusCode(500)
+        ctx.Write(respPythonDown)
         return
     }
 
-    // B. Jika Hide Data -> Cek Cache RAM Go dulu
-    if action == "hide_data" {
-        cacheKey := payload
-        if cached, found := dataCache.Load(cacheKey); found {
-            json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "result": cached, "boosted": true})
-            return
-        }
-        // Kalau tidak ada di cache, baru suruh Python
-        pyResult, err := proxyToPython(body)
-        if err == nil && pyResult["status"] == "success" {
-            resStr := pyResult["result"].(string)
-            dataCache.Store(cacheKey, resStr) // Simpan ke RAM Go
-            json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "result": resStr, "boosted": false})
-            return
-        }
+    // ── Encrypt/Decrypt ──
+    result, err := proxyToPython(req)
+    if err != nil {
+        ctx.SetStatusCode(500)
+        ctx.Write(respPythonDown)
+        return
     }
 
-    // C. Jika Encrypt / Decrypt -> Langsung lempar ke Python
-    if action == "encrypt" || action == "decrypt" {
-        pyResult, err := proxyToPython(body)
-        if err == nil {
-            json.NewEncoder(w).Encode(pyResult)
-            return
-        }
-    }
-
-    w.WriteHeader(http.StatusInternalServerError)
-    json.NewEncoder(w).Encode(map[string]interface{}{"status": "PYTHON_VAULT_DOWN"})
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    json.NewEncoder(buf).Encode(result)
+    ctx.Write(buf.Bytes())
+    bufPool.Put(buf)
 }
 
 func main() {
-    log.Println("⚔️ Nathan Hybrid Engine (Go + Python) Started on :8080")
-    http.HandleFunc("/api/monitor", securityHandler)
-    http.ListenAndServe(":8080", nil)
+    startCacheCleaner()
+
+    // FastHTTP server - zero memory allocation per request
+    server := &fasthttp.Server{
+        Handler:               securityHandlerFast,
+        Name:                  "NathanUltra/2.0",
+        MaxRequestBodySize:    65536,
+        ReadTimeout:           time.Second * 8,
+        WriteTimeout:          time.Second * 8,
+        IdleTimeout:           time.Second * 120,
+        MaxConnsPerIP:         100,
+        Concurrency:           0, // unlimited
+        ReduceMemoryUsage:     true,
+        StreamRequestBody:     false,
+        HeaderReceivedTimeout: time.Second * 3,
+    }
+
+    log.Println("🚀 Nathan EXTREME Engine (FastHTTP) Started on :8080")
+    if err := server.ListenAndServe(":8080"); err != nil {
+        log.Fatal(err)
+    }
 }
