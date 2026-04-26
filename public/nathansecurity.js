@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 NITROUS BOOSTER v3 (ULTRA STEALTH MODE)
+// 🚀 NITROUS BOOSTER v3 (GHOST CDN MODE)
 // ==========================================
 (function() {
     'use strict';
@@ -13,12 +13,30 @@
     window.fetch = async function(...args) {
         const url = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
         
-        // STEALTH: Tidak ada cache, tidak ada gangguan untuk API web host
+        // 🔒 GHOST MODE: Jika ini API web langganan (Database, AI, dll), LANGSUNG LEWAT. TIDAK DIOPAK APAPUN.
         if (!url.includes(CDN_BASE)) {
             return originalFetch.apply(this, args);
         }
 
+        // Di bawah ini HANYA berlaku untuk request ke NathanSecurity saja (untuk hemat bandwith)
+        const body = args[1]?.body;
+        let cacheKey = url + (body || "");
+        
+        if (apiCache.has(cacheKey)) {
+            const cached = apiCache.get(cacheKey);
+            if (Date.now() - cached.time < 300000) {
+                return new Response(JSON.stringify(cached.data), { status: 200, headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' } });
+            }
+        }
+        
         const response = await originalFetch.apply(this, args);
+        if (response.ok) {
+            const cloneResponse = response.clone();
+            cloneResponse.json().then(data => {
+                apiCache.set(cacheKey, { data: data, time: Date.now() });
+                if (apiCache.size > 50) { const oldestKey = apiCache.keys().next().value; apiCache.delete(oldestKey); }
+            }).catch(() => {});
+        }
         return response;
     };
 
@@ -26,11 +44,21 @@
     l.rel = 'preconnect';
     l.href = CDN_BASE;
     document.head.appendChild(l);
+
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            try {
+                const w = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
+                let n;
+                while (n = w.nextNode()) { n.remove(); }
+            } catch(e) {}
+        }, 2000);
+    });
 })();
 
 
 // ==========================================
-// 🛡️ INVISIBLE SECURITY SHIELD v3 (ULTRA STEALTH MODE)
+// 🛡️ INVISIBLE SECURITY SHIELD v3 (GHOST CDN MODE)
 // ==========================================
 (function() {
     'use strict';
@@ -80,7 +108,7 @@
         } catch(e) { return data; }
     }
 
-    // STEALTH: LocalStorage aman, hanya menyentuh yang ditandai NS_SAFE
+    // 🔒 GHOST MODE: LocalStorage aman 100%. Tidak akan menyentuh Token/Database web langganan.
     const origLSSet = Storage.prototype.setItem;
     const origLSGet = Storage.prototype.getItem;
     
@@ -88,7 +116,7 @@
         if (typeof v === 'string' && v.startsWith(NS_MARKER)) {
             origLSSet.call(this, k, encryptData(v)); 
         } else {
-            origLSSet.call(this, k, v); 
+            origLSSet.call(this, k, v); // Biarkan web utama menyimpan data normal
         }
     };
     
@@ -108,7 +136,7 @@
         if ((e.ctrlKey || e.metaKey) && e.key === 'p') { e.preventDefault(); e.stopPropagation(); showMiniToast('🖨️ Print dinonaktifkan'); return false; }
     }, true);
 
-    // Drag Protection (Hanya elemen yang ditandai, aman untuk web host)
+    // Drag Protection
     document.addEventListener('dragstart', function(e) {
         if (e.target.closest('[data-nathan-protected]')) {
             e.preventDefault(); return false;
@@ -135,9 +163,26 @@
         };
     }
 
-    // STEALTH: MUTATION OBSERVER DINONAKTIFKAN TOTAL
-    // Kita TIDAK menghapus <script>, <iframe>, <object>, atau apapun dari DOM web host.
-    // Ini mencegah crash pada React, Vue, Iframe YouTube/Instagram, dan layout Flexbox.
+    // 🔒 GHOST MODE: Anti-XSS tidak akan menghapus script yang dimuat oleh Web Utama (Cegah Web Crash)
+    const xssPatterns = [/document\.cookie/i, /document\.write/i, /\beval\s*\(/i, /Function\s*\(/i, /setTimeout\s*\(\s*['"`]/i, /setInterval\s*\(\s*['"`]/i, /atob\s*\(/i, /String\.fromCharCode/i, /\.innerHTML\s*=/i, /\.outerHTML\s*=/i, /window\.location\s*=/i];
+    new MutationObserver(mutations => {
+        mutations.forEach(m => m.addedNodes.forEach(node => {
+            if (node.nodeName === 'SCRIPT') {
+                // Jika script punya URL (src) yang jelas, biarkan (Dipastikan bukan XSS injeksi inline)
+                if (node.src && node.src.startsWith('http')) return; 
+                
+                // Hanya blokir jika itu Script Inline yang mencurigakan
+                if (!node.src && node.textContent && xssPatterns.some(p => p.test(node.textContent))) { 
+                    node.remove(); return; 
+                }
+                if (node.src && /javascript:|data:text\/html|blob:/i.test(node.src)) { node.remove(); return; }
+            }
+            if (node.nodeName === 'IFRAME' && node.src && /javascript:|data:text\/html/i.test(node.src)) node.remove();
+        }));
+    }).observe(document.documentElement || document.body, { childList: true, subtree: true });
+
+    // 🔒 GHOST MODE: Anti-Iframe DINONAKTIFKAN untuk versi CDN.
+    // Kami tidak berhak menghancurkan layout Web Langganan jika mereka memakai Iframe.
 
     // Keyboard Protection
     document.addEventListener('keydown', function(e) {
@@ -230,7 +275,7 @@
                 <div class="ns-grid-item"><div class="ns-grid-icon">🖱️</div><div class="ns-grid-label">Clickjack</div></div>
             </div>
             <div class="ns-popup-footer">
-                Shield v3.0 · Stealth Mode · Encrypted Storage<br>
+                Shield v3.0 · 13 Active Modules · Encrypted Storage<br>
                 <span class="ns-footer-hint">* Matikan JavaScript untuk melewati antarmuka ini</span>
             </div>
         `;
@@ -296,6 +341,6 @@
         document.body.innerHTML = `<div class="c"><div class="ic">⛔</div><h1>${title}</h1><p>${reason}<br><br>Akses Anda telah diblokir permanen.</p><div class="f">Nathan Security</div></div>`;
     }
 
-    console.log('%c🛡️ Nathan Security Shield v3 (Ultra Stealth) Active', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
+    console.log('%c🛡️ Nathan Security Shield v3 (Ghost CDN) Active', 'color: #00ADD8; font-size: 14px; font-weight: bold;');
 
 })();
